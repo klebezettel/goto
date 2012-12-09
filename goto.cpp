@@ -383,14 +383,14 @@ void BookmarkMenu::readBookmarksFromFile()
 
     // Read file
     ifstream file(filePath.c_str());
-    if (!file.is_open())
+    if (! file)
         NCursesApplication::error("Could not open file \"" + filePath + "\"");
 
     // Parse file
     m_menuItems.clear();
     string line;
     const char delimiter = ',';
-    for (unsigned lineNumber = 1; file.good() && getline(file, line); ++lineNumber) {
+    for (unsigned lineNumber = 1; file && getline(file, line); ++lineNumber) {
         // Skip empty lines
         string copiedLine(line);
         if (trim(copiedLine).empty())
@@ -417,10 +417,10 @@ void BookmarkMenu::readBookmarksFromFile()
 static void writeResultToFile(const string resultPath, const string filePath)
 {
     ofstream file(filePath);
-    if (! file.is_open())
+    if (! file)
         NCursesApplication::error("Could not open file \"" + filePath + "\" for writing");
     file << resultPath << flush;
-    if (! file.good())
+    if (! file)
         NCursesApplication::error("Failed to write file  \"" + filePath + "\"");
 }
 
