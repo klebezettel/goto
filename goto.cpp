@@ -44,6 +44,7 @@ using namespace std;
 static const int KEY_ESC = 27;
 static const int KEY_RETURN = 10;
 static const char BookmarkFile[] = ".goto.bookmarks";
+static const char ResultFile[] = ".goto.result";
 
 static inline string &ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(
@@ -72,15 +73,7 @@ class NCursesApplication
 public:
     NCursesApplication()
     {
-        SCREEN *newScreen = newterm(NULL, stderr, stdin);
-        if (newScreen == NULL)
-            error("Error: newterm()");
-        /*SCREEN *oldScreen = */set_term(newScreen);
-        // Don't delete the oldscreen, otherwise newwin() will fail with a seg fault.
-//        if (oldScreen == NULL)
-//            error("Error: set_term()");
-//        delscreen(oldScreen);
-
+        initscr();
         cbreak();
         noecho();
         keypad(stdscr, TRUE); // Enables us to catch arrow presses.
@@ -421,15 +414,30 @@ void BookmarkMenu::readBookmarksFromFile()
     file.close();
 }
 
+static void writeResultToFile(const string resultPath, const string filePath)
+{
+    ofstream file(filePath);
+    if (! file.is_open())
+        NCursesApplication::error("Could not open file \"" + filePath + "\" for writing");
+    file << resultPath << flush;
+    if (! file.good())
+        NCursesApplication::error("Failed to write file  \"" + filePath + "\"");
+}
+
 int main()
 {
     ShellDirsApp app;
 
+    string resultPath = ".";
     BookmarkMenu menu(MenuItems(), &app);
-    int result = menu.exec();
-    if (result == FilterMenu::ItemChosen) {
-        // Just print the path
-        cout << menu.chosenItem()->path();
-    }
+    if (menu.exec() == FilterMenu::ItemChosen)
+        resultPath = menu.chosenItem()->path();
+
+	// No result file is written if the user aborts by e.g. Ctrl-C since we
+	// never will get to this point.  This is OK since the shell function
+	// handles this case.
+    const string resultFilePath = getEnvironmentVariableOrDie("HOME") + "/" + ResultFile;
+    writeResultToFile(resultPath, resultFilePath);
+
     return EXIT_SUCCESS;
 }
