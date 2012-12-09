@@ -18,26 +18,25 @@ Setup instructions
 2. Use the following shell function as a wrapper. You may want to bind the
    function to a short cut as in the example below.
 
-   # Call this from your shell to access your bookmarks.
-   function to()
-   {
-     goto
-
-     # If the user aborts by Ctrl-C there will be no result file, so check first.
-     result_file=$HOME/.goto.result
-     if [ -f "$result_file" ]; then
-         result_path=`cat $result_file`
-         rm $result_file
-     else
-         result_path="."
-     fi
-     cd $result_path;
-   }
-
-   # Convenience, bind to() to Ctrl-F.
-   # This is zsh specific. Adapt to your shell.
-   # ^q: Evaluate the next stuff isolated from so far entered text.
-   bindkey -s '^f' '^qto\n'
+		# Call this from your shell to access your bookmarks.
+		function to()
+		{
+		  goto
+		  # If the user aborts by Ctrl-C there will be no result file, so check first.
+		  result_file=$HOME/.goto.result
+		  if [ -f "$result_file" ]; then
+		      result_path=`cat $result_file`
+		      rm $result_file
+		  else
+		      result_path="."
+		  fi
+		  cd $result_path;
+		}
+	
+		# Convenience, bind to() to Ctrl-F.
+		# This is zsh specific. Adapt to your shell.
+		# ^q: Evaluate the next stuff isolated from so far entered text.
+		bindkey -s '^f' '^qto\n'
 
 Run instructions
 ----------------
