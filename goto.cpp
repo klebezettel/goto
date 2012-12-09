@@ -283,7 +283,7 @@ void FilterMenu::printMenu()
 void FilterMenu::navigateUp()
 {
     if (m_highlighted_row == 0)
-        m_highlighted_row = m_menuItems.size();
+        m_highlighted_row = m_menuItems.size()-1;
     else
         --m_highlighted_row;
 }
