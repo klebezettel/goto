@@ -1,14 +1,12 @@
-goto
-====
+goto - Bookmarks for the shell
+==============================
 
-File bookmarks for the shell. cdargs clone.
-
-Implemented with C++11 and ncurses.
+A cdargs clone, implemented with C++11 and ncurses.
 
 Build instructions
 ------------------
- $ qmake  # You may need to install qmake.
- $ make
+		$ qmake  # You may need to install qmake.
+		$ make
 
 Though qmake is used, there is no dependency to any Qt library.
 
