@@ -3,7 +3,7 @@
 // Listing Bookmarks mode:
 //  <number> <name> <fullpath>
 //
-// Config file is ~/.hotlist
+// Config file is ~/.goto.bookmarks
 //
 // Keys:
 //   Up, k, Down, j:    Move up and down the list.
@@ -43,7 +43,7 @@ using namespace std;
 
 static const int KEY_ESC = 27;
 static const int KEY_RETURN = 10;
-static const char BookmarkFile[] = ".hotlist";
+static const char BookmarkFile[] = ".goto.bookmarks";
 
 static inline string &ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(
