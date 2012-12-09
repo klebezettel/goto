@@ -433,9 +433,9 @@ int main()
     if (menu.exec() == FilterMenu::ItemChosen)
         resultPath = menu.chosenItem()->path();
 
-	// No result file is written if the user aborts by e.g. Ctrl-C since we
-	// never will get to this point.  This is OK since the shell function
-	// handles this case.
+    // No result file is written if the user aborts by e.g. Ctrl-C since we
+    // never will get to this point.  This is OK since the shell function
+    // handles this case.
     const string resultFilePath = getEnvironmentVariableOrDie("HOME") + "/" + ResultFile;
     writeResultToFile(resultPath, resultFilePath);
 
