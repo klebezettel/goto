@@ -328,12 +328,12 @@ void FilterMenu::printInputSoFar()
 bool FilterMenu::handleKey(int key)
 {
     KeyMapIterator it = m_map.find(key);
-    if (it != m_map.end()) {
-        KeyHandlerFunction handler = it->second;
-        (handler)();
-        return true;
-    }
-    return false;
+    if (it == m_map.end())
+        return false;
+
+    KeyHandlerFunction handler = it->second;
+    (handler)();
+    return true;
 }
 
 typedef shared_ptr<BookmarkItem> BookmarkItemPointer;
