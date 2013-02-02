@@ -301,8 +301,8 @@ void FilterMenu::navigateToEnd()
 void FilterMenu::navigateByDigit()
 {
     const unsigned newRow = m_key - '0';
-    if (newRow <= m_menuItems.size()-1)
-        m_highlighted_row = newRow;
+    const unsigned lastRow = m_menuItems.size() - 1;
+    m_highlighted_row = newRow <= lastRow ? newRow : lastRow;
 }
 
 void FilterMenu::navigateDown()
