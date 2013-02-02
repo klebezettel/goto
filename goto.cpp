@@ -273,7 +273,7 @@ void FilterMenu::printMenu()
         if (shouldStandOut)
             attributes |= A_UNDERLINE;
         wattron(m_menu_win, attributes);
-        mvwprintw(m_menu_win, y, x, "%2s [%s] %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
+        mvwprintw(m_menu_win, y, x, "%2s %s %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
                   item->secondaryText().c_str());
         wattroff(m_menu_win, attributes);
     }
