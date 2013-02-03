@@ -19,9 +19,9 @@
 //   Esc:               Exit, e.g. stay in $CWD (or abort filter in filter mode).
 //
 //  Display:
-//    - Show path abbreviated (~ instead of $HOME).
-//    - Highlight not existent dirs (red).
-//    - Highlight bookmark if it's $CWD.
+//    - DONE: Show path abbreviated (~ instead of $HOME).
+//    - TODO: Highlight not existent dirs (red).
+//    - TODO: Highlight bookmark if it's $CWD.
 //
 
 #include <cctype>
@@ -32,6 +32,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -45,6 +46,63 @@ static const int KEY_ESC = 27;
 static const int KEY_RETURN = 10;
 static const char BookmarkFile[] = ".goto.bookmarks";
 static const char ResultFile[] = ".goto.result";
+
+static const int FILTERMENU_ROWS = 0; // full size
+static const int FILTERMENU_COLUMNS = 0; // full size
+
+// --- Debug & Assert -----------------------------------------------------------------------------
+
+#define DEBUG_OUTPUT 0
+/// Ncurses apps cannot just print to stdout/stderr, so print to a file
+class DebugOutput
+{
+#if DEBUG_OUTPUT
+    ofstream m_file;
+#endif
+public:
+#if DEBUG_OUTPUT
+    explicit DebugOutput(const char *filePath)
+        : m_file(filePath)
+    {
+        if (! m_file)
+            exit(EXIT_FAILURE);
+    }
+
+    ~DebugOutput() { m_file << endl << flush; }
+#else
+    explicit DebugOutput(const char *) {}
+#endif
+
+#if DEBUG_OUTPUT
+#define OUT_OPERATOR(type) \
+    DebugOutput &operator<<(const type value) \
+    { \
+        m_file << value << endl << flush; \
+        return *this; \
+    }
+#else
+#define OUT_OPERATOR(type) \
+    DebugOutput &operator<<(const type) { return *this; }
+#endif
+
+    OUT_OPERATOR(string&)
+    OUT_OPERATOR(wostream&) // for endl
+    OUT_OPERATOR(char*)
+    OUT_OPERATOR(bool)
+    OUT_OPERATOR(int)
+};
+
+// TODO: Would be nice to append 'endl' after all '<<' operations are done.
+static DebugOutput &debug() {
+    static DebugOutput out("/tmp/goto_debug.log");
+    return out;
+}
+
+/// Just a soft assert
+#define assert(condition) \
+    if (!(condition)) { debug() << "Assertion failed: " << #condition; }
+
+// --- Utils --------------------------------------------------------------------------------------
 
 static inline string &ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(
@@ -67,6 +125,8 @@ static inline string &rtrim(std::string &s) {
 static inline string &trim(std::string &s) {
     return ltrim(rtrim(s));
 }
+
+// --- Application classes ------------------------------------------------------------------------
 
 class NCursesApplication
 {
@@ -129,6 +189,8 @@ public:
     }
 };
 
+// --- Menus and Menu Items ----------------------------------------------------------------------
+
 class IMenuItem
 {
 public:
@@ -170,6 +232,35 @@ typedef function<void()> KeyHandlerFunction;
 typedef map<int, KeyHandlerFunction> KeyMap;
 typedef map<int, KeyHandlerFunction>::iterator KeyMapIterator;
 
+class ScrollArea
+{
+public:
+    ScrollArea(unsigned firstRow, unsigned rowCount)
+        : m_firstRow(firstRow), m_rowCount(rowCount) {}
+
+    unsigned rowCount() { return m_rowCount; }
+
+    unsigned firstRow() { return m_firstRow; }
+    unsigned lastRow() { return m_firstRow + m_rowCount - 1; }
+    void resetTo(unsigned firstRow) { m_firstRow = firstRow; }
+
+    void moveDown()
+    {
+        ++m_firstRow;
+        assert(m_firstRow != std::numeric_limits<unsigned>::max());
+    }
+
+    void moveUp()
+    {
+        --m_firstRow;
+        assert(m_firstRow != std::numeric_limits<unsigned>::max());
+    }
+
+private:
+    unsigned m_firstRow;
+    unsigned m_rowCount;
+};
+
 class FilterMenu : public IKeyHandler
 {
 public:
@@ -180,8 +271,10 @@ public:
     MenuItemPointer chosenItem();
 
     void printMenu();
-    void navigateUp();
-    void navigateDown();
+    void navigateEntryUp();
+    void navigateEntryDown();
+    void navigatePageUp();
+    void navigatePageDown();
     void navigateToStart();
     void navigateToEnd();
     void navigateByDigit();
@@ -195,30 +288,47 @@ private:
     void printInputSoFar();
     bool handleKey(int key);
 
+    // When true, jump to the first entry if pressing down arrow on last item
+    // When true, jump to the last entry if pressing uparrow on first item
+    bool m_optionWrapOnEntryNavigation;
+
     int m_key;
     MenuItemPointer m_chosenItem;
-    unsigned m_highlighted_row;
     string m_filterInput;
     IKeyHandler *m_parentKeyHandler;
-    WINDOW *m_menu_win;
+    ScrollArea m_scrollArea;
+    unsigned m_selectedRow;
+    WINDOW *m_window;
 };
 
 FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
     : m_menuItems(menuItems)
+    , m_optionWrapOnEntryNavigation(false)
     , m_key(-1)
     , m_chosenItem(0)
-    , m_highlighted_row(0)
     , m_parentKeyHandler(parentKeyHandler)
-    , m_menu_win(newwin(0, 0, 0, 0)) // Full screen window.
+    , m_scrollArea(0, FILTERMENU_ROWS)
+    , m_selectedRow(0)
+    , m_window(newwin(FILTERMENU_ROWS, FILTERMENU_COLUMNS, 0, 0))
 {
-    keypad(m_menu_win, TRUE);
-    m_map[KEY_UP] = bind(&FilterMenu::navigateUp, this);
-    m_map['k'] = bind(&FilterMenu::navigateUp, this);
-    m_map[KEY_DOWN] = bind(&FilterMenu::navigateDown, this);
-    m_map['j'] = bind(&FilterMenu::navigateDown, this);
+//    box(m_menu_win, 0, 0);
+
+    int windowColumns, windowRows;
+    getmaxyx(m_window, windowRows, windowColumns);
+    m_scrollArea = ScrollArea(0, windowRows);
+    debug() << "FilterMenu: Window size: " << windowColumns << "x" << windowRows;
+
+    keypad(m_window, TRUE);
+    m_map[KEY_UP] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map['k'] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map[KEY_DOWN] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map['j'] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map[KEY_NPAGE] = bind(&FilterMenu::navigatePageDown, this);
+    m_map[KEY_PPAGE] = bind(&FilterMenu::navigatePageUp, this);
     m_map[KEY_HOME] = bind(&FilterMenu::navigateToStart, this);
     m_map[KEY_END] = bind(&FilterMenu::navigateToEnd, this);
     m_map[KEY_RETURN] = bind(&FilterMenu::fire, this);
+
     for (int i = '0'; i <= '9'; ++i)
         m_map[i] = bind(&FilterMenu::navigateByDigit, this);
 }
@@ -227,7 +337,7 @@ int FilterMenu::exec()
 {
     while (!m_chosenItem) {
         printMenu();
-        m_key = wgetch(m_menu_win);
+        m_key = wgetch(m_window);
         if (!handleKey(m_key) && m_parentKeyHandler)
             m_parentKeyHandler->handleKey(m_key);
     }
@@ -254,9 +364,12 @@ void FilterMenu::printMenu()
     }
 
     // Print them
-    for (unsigned i = 0; i < m_menuItems.size(); ++i, ++y) {
+    unsigned int to = m_menuItems.size() - 1 < m_scrollArea.lastRow()
+        ? m_menuItems.size() - 1
+        : m_scrollArea.lastRow();
+    for (unsigned i = m_scrollArea.firstRow(); i <= to; ++i, ++y) {
         const MenuItemPointer item = m_menuItems.at(i);
-        const bool isCurrentItem = m_highlighted_row == i;
+        const bool isCurrentItem = m_selectedRow == i;
         const bool shouldBeHighlighted = item->identifierTextFlags() & IMenuItem::Highlight;
         const bool shouldStandOut = item->identifierTextFlags() & IMenuItem::Attention;
 
@@ -272,56 +385,115 @@ void FilterMenu::printMenu()
             attributes |= A_BOLD;
         if (shouldStandOut)
             attributes |= A_UNDERLINE;
-        wattron(m_menu_win, attributes);
-        mvwprintw(m_menu_win, y, x, "%2s %s %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
+        wattron(m_window, attributes);
+        // Clear line
+        mvwhline(m_window, y, x, NCURSES_ACS(' '), 1000); // TODO: Is it OK to use NCURSES_ACS?
+        // Write line
+        mvwprintw(m_window, y, x, "%2s %s %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
                   item->path().c_str());
-        wattroff(m_menu_win, attributes);
+        wattroff(m_window, attributes);
     }
-    wrefresh(m_menu_win);
-}
-
-void FilterMenu::navigateUp()
-{
-    if (m_highlighted_row == 0)
-        m_highlighted_row = m_menuItems.size()-1;
-    else
-        --m_highlighted_row;
+    wrefresh(m_window);
 }
 
 void FilterMenu::navigateToStart()
 {
-    m_highlighted_row = 0;
+    m_selectedRow = 0;
+    m_scrollArea.resetTo(0);
 }
 
 void FilterMenu::navigateToEnd()
 {
-    m_highlighted_row = m_menuItems.size()-1;
+    m_selectedRow = m_menuItems.size() - 1;
+
+    if (m_menuItems.size() == 0)
+        m_scrollArea.resetTo(0);
+    else if (m_scrollArea.lastRow() < m_selectedRow)
+        m_scrollArea.resetTo(m_selectedRow - (m_scrollArea.rowCount() - 1));
 }
 
 void FilterMenu::navigateByDigit()
 {
     const unsigned newRow = m_key - '0';
     const unsigned lastRow = m_menuItems.size() - 1;
-    m_highlighted_row = newRow <= lastRow ? newRow : lastRow;
+    m_selectedRow = newRow <= lastRow ? newRow : lastRow;
+    if (m_selectedRow < m_scrollArea.firstRow())
+        m_scrollArea.resetTo(m_selectedRow);
 }
 
-void FilterMenu::navigateDown()
+void FilterMenu::navigateEntryUp()
 {
-    if (m_highlighted_row == m_menuItems.size()-1)
-        m_highlighted_row = 0;
-    else
-        ++m_highlighted_row;
+    if (m_selectedRow == 0) {
+        if (m_optionWrapOnEntryNavigation)
+            navigateToEnd();
+    } else {
+        --m_selectedRow;
+        const bool nonVisibleItemsBefore = m_scrollArea.firstRow() != 0;
+        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollArea.firstRow() - 1;
+        if (nonVisibleItemsBefore && selectedLineWouldBeInvisible)
+            m_scrollArea.moveUp();
+    }
+}
+
+void FilterMenu::navigateEntryDown()
+{
+    if (m_selectedRow == m_menuItems.size() - 1) {
+        if (m_optionWrapOnEntryNavigation)
+            navigateToStart();
+    }  else {
+        ++m_selectedRow;
+        const bool nonVisibleItemsFollowing = m_scrollArea.lastRow() < m_menuItems.size() - 1;
+        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollArea.lastRow() + 1;
+        if (nonVisibleItemsFollowing && selectedLineWouldBeInvisible)
+            m_scrollArea.moveDown();
+    }
+
+    wrefresh(m_window);
+}
+
+void FilterMenu::navigatePageUp()
+{
+    if (m_selectedRow == 0) {
+        assert(m_selectedRow == m_scrollArea.firstRow())
+        return;
+    }
+
+    int newFirstRow = m_scrollArea.firstRow() - m_scrollArea.rowCount();
+    if (newFirstRow > 0) {
+        m_selectedRow = newFirstRow;
+        m_scrollArea.resetTo(newFirstRow);
+    } else {
+        navigateToStart();
+    }
+}
+
+void FilterMenu::navigatePageDown()
+{
+    if (m_selectedRow == m_menuItems.size() - 1) { // last row is selected
+        assert(m_selectedRow == m_scrollArea.lastRow())
+        return;
+    }
+
+    const unsigned newFirstRow = m_scrollArea.lastRow() + 1;
+    const unsigned newLastRow = newFirstRow + m_scrollArea.rowCount() - 1;
+    if (newLastRow < m_menuItems.size() - 1) {
+        m_selectedRow = newFirstRow;
+        m_scrollArea.resetTo(newFirstRow);
+    } else {
+        navigateToEnd();
+    }
 }
 
 void FilterMenu::fire()
 {
-    m_chosenItem = m_menuItems.at(m_highlighted_row);
+    assert(m_selectedRow <= m_menuItems.size() - 1);
+    m_chosenItem = m_menuItems.at(m_selectedRow);
 }
 
 void FilterMenu::printInputSoFar()
 {
-    mvwprintw(m_menu_win, 1, 1, "Filter: '%s'", m_filterInput.c_str());
-    wrefresh(m_menu_win);
+    mvwprintw(m_window, 1, 1, "Filter: '%s'", m_filterInput.c_str());
+    wrefresh(m_window);
     //        wclear(m_menu_win); // This one flickers with urxvt.
 }
 
@@ -365,7 +537,6 @@ void BookmarkMenu::openEditor()
         system(command.str().c_str());
         NCursesApplication::resumeNCurses();
         refresh();
-//        wrefresh(m_menu_win);
     }
     readBookmarksFromFile();
     refresh();
@@ -375,6 +546,8 @@ BookmarkItemPointer BookmarkMenu::chosenItem()
 {
     return static_pointer_cast<BookmarkItem>(FilterMenu::chosenItem());
 }
+
+// --- Input and Output --------------------------------------------------------------------------
 
 void BookmarkMenu::readBookmarksFromFile()
 {
@@ -423,6 +596,8 @@ static void writeResultToFile(const string resultPath, const string filePath)
     if (! file)
         NCursesApplication::error("Failed to write file  \"" + filePath + "\"");
 }
+
+// --- Main --------------------------------------------------------------------------------------
 
 int main()
 {
