@@ -135,11 +135,11 @@ public:
     virtual ~IMenuItem() {}
     enum DisplayFlags { Default = 0x0, Attention = 0x1, Highlight = 0x2 };
 
-    virtual string primaryText() const = 0;
-    virtual DisplayFlags primaryTextFlags() const = 0;
+    virtual string identifier() const = 0;
+    virtual DisplayFlags identifierTextFlags() const = 0;
 
-    virtual string secondaryText() const = 0;
-    virtual DisplayFlags secondaryTextFlags() const = 0;
+    virtual string path() const = 0;
+    virtual DisplayFlags pathTextFlags() const = 0;
 };
 
 typedef shared_ptr<IMenuItem> MenuItemPointer;
@@ -148,8 +148,8 @@ typedef vector<MenuItemPointer> MenuItems;
 class BookmarkItem : public IMenuItem {
 public:
     BookmarkItem(const string name, const string path) : m_name(name), m_path(path) {}
-    string primaryText() const { return m_name; }
-    string secondaryText() const
+    string identifier() const { return m_name; }
+    string path() const
     {
         const string homePath = getEnvironmentVariableOrDie("HOME");
         const int homePathLength = homePath.size();
@@ -157,8 +157,8 @@ public:
             return string(m_path).replace(0, homePathLength, "~");
         return m_path;
     }
-    DisplayFlags primaryTextFlags() const { return IMenuItem::Default; }
-    DisplayFlags secondaryTextFlags() const { return IMenuItem::Default; }
+    DisplayFlags identifierTextFlags() const { return IMenuItem::Default; }
+    DisplayFlags pathTextFlags() const { return IMenuItem::Default; }
 
     string path() { return m_path; }
 private:
@@ -248,7 +248,7 @@ void FilterMenu::printMenu()
     // Get width of first column
     unsigned firstColumnWidth = 0;
     for (auto v : m_menuItems) {
-        unsigned width = v->primaryText().size();
+        unsigned width = v->identifier().size();
         if (width > firstColumnWidth)
             firstColumnWidth = width;
     }
@@ -257,11 +257,11 @@ void FilterMenu::printMenu()
     for (unsigned i = 0; i < m_menuItems.size(); ++i, ++y) {
         const MenuItemPointer item = m_menuItems.at(i);
         const bool isCurrentItem = m_highlighted_row == i;
-        const bool shouldBeHighlighted = item->primaryTextFlags() & IMenuItem::Highlight;
-        const bool shouldStandOut = item->primaryTextFlags() & IMenuItem::Attention;
+        const bool shouldBeHighlighted = item->identifierTextFlags() & IMenuItem::Highlight;
+        const bool shouldStandOut = item->identifierTextFlags() & IMenuItem::Attention;
 
         stringstream ss;
-        ss << left << setw(firstColumnWidth) << item->primaryText();
+        ss << left << setw(firstColumnWidth) << item->identifier();
         const string paddedDisplayText = ss.str();
         const string digitAccessor = i <= 9 ? to_string(i).c_str() : "";
         int attributes = 0;
@@ -274,7 +274,7 @@ void FilterMenu::printMenu()
             attributes |= A_UNDERLINE;
         wattron(m_menu_win, attributes);
         mvwprintw(m_menu_win, y, x, "%2s %s %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
-                  item->secondaryText().c_str());
+                  item->path().c_str());
         wattroff(m_menu_win, attributes);
     }
     wrefresh(m_menu_win);
