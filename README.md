@@ -5,14 +5,14 @@ A cdargs clone, implemented with C++11 and ncurses.
 
 Build instructions
 ------------------
-		$ qmake  # You may need to install qmake.
+		$ qmake  # You may need to install qt/qmake.
 		$ make
 
-Though qmake is used, there is no dependency to any Qt library.
+Though qmake is used, there is no run time dependency to any Qt library.
 
 Setup instructions
 ------------------
-1. Make the binary visible by setting a proper PATH.
+1. Make the binary invokable by setting a proper PATH.
 2. Use the following shell function as a wrapper. You may want to bind the
    function to a short cut as in the example below.
 
@@ -38,6 +38,8 @@ Setup instructions
 
 Run instructions
 ----------------
-Just call the shell function:
+Just call the shell function directly:
 
  $ to
+
+or hit Ctrl-F.
