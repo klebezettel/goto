@@ -6,8 +6,8 @@ CONFIG -= qt
 QMAKE_CXXFLAGS += -pedantic -std=c++11
 
 LIBS += -lncurses
-
 SOURCES += goto.cpp
+OTHER_FILES += README.md
 
 unix {
 	debug:OBJECTS_DIR = $${OUT_PWD}/.obj/debug-shared
