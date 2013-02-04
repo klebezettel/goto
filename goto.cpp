@@ -142,9 +142,12 @@ public:
 
     ~NCursesApplication() { shutdownNCurses(); }
 
-    // Prefer to use destructor, not this one.
-    static void shutdownNCurses() { endwin(); }
-    static void resumeNCurses() { refresh(); }
+    static void runExternalCommand(const string &command)
+    {
+        shutdownNCurses();
+        system(command.c_str());
+        resumeNCurses();
+    }
 
     static void error(const string errorMessage)
     {
@@ -158,6 +161,11 @@ public:
         shutdownNCurses();
         ::exit(exitCode);
     }
+
+private:
+    // Prefer to use destructor, not this one.
+    static void shutdownNCurses() { endwin(); }
+    static void resumeNCurses() { refresh(); }
 };
 
 static inline string getEnvironmentVariableOrDie(const char * const name)
@@ -174,7 +182,7 @@ public:
     virtual bool handleKey(int key) = 0;
 };
 
-class ShellDirsApp : public NCursesApplication, public IKeyHandler
+class GotoApplication : public NCursesApplication, public IKeyHandler
 {
 public:
     bool handleKey(int key)
@@ -215,7 +223,7 @@ public:
     {
         const string homePath = getEnvironmentVariableOrDie("HOME");
         const int homePathLength = homePath.size();
-        if (!m_path.compare(0, homePathLength, homePath))
+        if (! m_path.compare(0, homePathLength, homePath))
             return string(m_path).replace(0, homePathLength, "~");
         return m_path;
     }
@@ -232,10 +240,11 @@ typedef function<void()> KeyHandlerFunction;
 typedef map<int, KeyHandlerFunction> KeyMap;
 typedef map<int, KeyHandlerFunction>::iterator KeyMapIterator;
 
-class ScrollArea
+/// Represents the visible lines if there are more menu entries than window lines.
+class ScrollView
 {
 public:
-    ScrollArea(unsigned firstRow, unsigned rowCount)
+    ScrollView(unsigned firstRow, unsigned rowCount)
         : m_firstRow(firstRow), m_rowCount(rowCount) {}
 
     unsigned rowCount() { return m_rowCount; }
@@ -270,6 +279,8 @@ public:
     int exec();
     MenuItemPointer chosenItem();
 
+    void reset();
+
     void printMenu();
     void navigateEntryUp();
     void navigateEntryDown();
@@ -288,15 +299,15 @@ private:
     void printInputSoFar();
     bool handleKey(int key);
 
-    // When true, jump to the first entry if pressing down arrow on last item
-    // When true, jump to the last entry if pressing uparrow on first item
+    /// When true, jump to the first entry if pressing down arrow on last
+    /// item and jump to the last entry if pressing uparrow on first item.
     bool m_optionWrapOnEntryNavigation;
 
     int m_key;
     MenuItemPointer m_chosenItem;
     string m_filterInput;
     IKeyHandler *m_parentKeyHandler;
-    ScrollArea m_scrollArea;
+    ScrollView m_scrollView;
     unsigned m_selectedRow;
     WINDOW *m_window;
 };
@@ -307,7 +318,7 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
     , m_key(-1)
     , m_chosenItem(0)
     , m_parentKeyHandler(parentKeyHandler)
-    , m_scrollArea(0, FILTERMENU_ROWS)
+    , m_scrollView(0, FILTERMENU_ROWS)
     , m_selectedRow(0)
     , m_window(newwin(FILTERMENU_ROWS, FILTERMENU_COLUMNS, 0, 0))
 {
@@ -315,7 +326,7 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
 
     int windowColumns, windowRows;
     getmaxyx(m_window, windowRows, windowColumns);
-    m_scrollArea = ScrollArea(0, windowRows);
+    m_scrollView = ScrollView(0, windowRows);
     debug() << "FilterMenu: Window size: " << windowColumns << "x" << windowRows;
 
     keypad(m_window, TRUE);
@@ -335,10 +346,10 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
 
 int FilterMenu::exec()
 {
-    while (!m_chosenItem) {
+    while (! m_chosenItem) {
         printMenu();
         m_key = wgetch(m_window);
-        if (!handleKey(m_key) && m_parentKeyHandler)
+        if (! handleKey(m_key) && m_parentKeyHandler)
             m_parentKeyHandler->handleKey(m_key);
     }
 
@@ -348,6 +359,13 @@ int FilterMenu::exec()
 MenuItemPointer FilterMenu::chosenItem()
 {
     return m_chosenItem;
+}
+
+void FilterMenu::reset()
+{
+    m_selectedRow = 0;
+    m_scrollView.resetTo(0);
+    wrefresh(m_window);
 }
 
 void FilterMenu::printMenu()
@@ -364,10 +382,10 @@ void FilterMenu::printMenu()
     }
 
     // Print them
-    unsigned int to = m_menuItems.size() - 1 < m_scrollArea.lastRow()
+    unsigned int to = m_menuItems.size() - 1 < m_scrollView.lastRow()
         ? m_menuItems.size() - 1
-        : m_scrollArea.lastRow();
-    for (unsigned i = m_scrollArea.firstRow(); i <= to; ++i, ++y) {
+        : m_scrollView.lastRow();
+    for (unsigned i = m_scrollView.firstRow(); i <= to; ++i, ++y) {
         const MenuItemPointer item = m_menuItems.at(i);
         const bool isCurrentItem = m_selectedRow == i;
         const bool shouldBeHighlighted = item->identifierTextFlags() & IMenuItem::Highlight;
@@ -399,7 +417,7 @@ void FilterMenu::printMenu()
 void FilterMenu::navigateToStart()
 {
     m_selectedRow = 0;
-    m_scrollArea.resetTo(0);
+    m_scrollView.resetTo(0);
 }
 
 void FilterMenu::navigateToEnd()
@@ -407,9 +425,9 @@ void FilterMenu::navigateToEnd()
     m_selectedRow = m_menuItems.size() - 1;
 
     if (m_menuItems.size() == 0)
-        m_scrollArea.resetTo(0);
-    else if (m_scrollArea.lastRow() < m_selectedRow)
-        m_scrollArea.resetTo(m_selectedRow - (m_scrollArea.rowCount() - 1));
+        m_scrollView.resetTo(0);
+    else if (m_scrollView.lastRow() < m_selectedRow)
+        m_scrollView.resetTo(m_selectedRow - (m_scrollView.rowCount() - 1));
 }
 
 void FilterMenu::navigateByDigit()
@@ -417,8 +435,8 @@ void FilterMenu::navigateByDigit()
     const unsigned newRow = m_key - '0';
     const unsigned lastRow = m_menuItems.size() - 1;
     m_selectedRow = newRow <= lastRow ? newRow : lastRow;
-    if (m_selectedRow < m_scrollArea.firstRow())
-        m_scrollArea.resetTo(m_selectedRow);
+    if (m_selectedRow < m_scrollView.firstRow())
+        m_scrollView.resetTo(m_selectedRow);
 }
 
 void FilterMenu::navigateEntryUp()
@@ -428,10 +446,10 @@ void FilterMenu::navigateEntryUp()
             navigateToEnd();
     } else {
         --m_selectedRow;
-        const bool nonVisibleItemsBefore = m_scrollArea.firstRow() != 0;
-        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollArea.firstRow() - 1;
+        const bool nonVisibleItemsBefore = m_scrollView.firstRow() != 0;
+        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.firstRow() - 1;
         if (nonVisibleItemsBefore && selectedLineWouldBeInvisible)
-            m_scrollArea.moveUp();
+            m_scrollView.moveUp();
     }
 }
 
@@ -442,10 +460,10 @@ void FilterMenu::navigateEntryDown()
             navigateToStart();
     }  else {
         ++m_selectedRow;
-        const bool nonVisibleItemsFollowing = m_scrollArea.lastRow() < m_menuItems.size() - 1;
-        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollArea.lastRow() + 1;
+        const bool nonVisibleItemsFollowing = m_scrollView.lastRow() < m_menuItems.size() - 1;
+        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.lastRow() + 1;
         if (nonVisibleItemsFollowing && selectedLineWouldBeInvisible)
-            m_scrollArea.moveDown();
+            m_scrollView.moveDown();
     }
 
     wrefresh(m_window);
@@ -454,14 +472,14 @@ void FilterMenu::navigateEntryDown()
 void FilterMenu::navigatePageUp()
 {
     if (m_selectedRow == 0) {
-        assert(m_selectedRow == m_scrollArea.firstRow())
+        assert(m_selectedRow == m_scrollView.firstRow())
         return;
     }
 
-    int newFirstRow = m_scrollArea.firstRow() - m_scrollArea.rowCount();
+    int newFirstRow = m_scrollView.firstRow() - m_scrollView.rowCount();
     if (newFirstRow > 0) {
         m_selectedRow = newFirstRow;
-        m_scrollArea.resetTo(newFirstRow);
+        m_scrollView.resetTo(newFirstRow);
     } else {
         navigateToStart();
     }
@@ -469,16 +487,16 @@ void FilterMenu::navigatePageUp()
 
 void FilterMenu::navigatePageDown()
 {
-    if (m_selectedRow == m_menuItems.size() - 1) { // last row is selected
-        assert(m_selectedRow == m_scrollArea.lastRow())
+    if (m_selectedRow == m_menuItems.size() - 1) {
+        assert(m_selectedRow == m_scrollView.lastRow())
         return;
     }
 
-    const unsigned newFirstRow = m_scrollArea.lastRow() + 1;
-    const unsigned newLastRow = newFirstRow + m_scrollArea.rowCount() - 1;
+    const unsigned newFirstRow = m_scrollView.lastRow() + 1;
+    const unsigned newLastRow = newFirstRow + m_scrollView.rowCount() - 1;
     if (newLastRow < m_menuItems.size() - 1) {
         m_selectedRow = newFirstRow;
-        m_scrollArea.resetTo(newFirstRow);
+        m_scrollView.resetTo(newFirstRow);
     } else {
         navigateToEnd();
     }
@@ -494,7 +512,7 @@ void FilterMenu::printInputSoFar()
 {
     mvwprintw(m_window, 1, 1, "Filter: '%s'", m_filterInput.c_str());
     wrefresh(m_window);
-    //        wclear(m_menu_win); // This one flickers with urxvt.
+    // wclear(m_menu_win); // This one flickers with urxvt.
 }
 
 bool FilterMenu::handleKey(int key)
@@ -532,14 +550,10 @@ void BookmarkMenu::openEditor()
 {
     stringstream command;
     command << "$EDITOR " << "$HOME/" << BookmarkFile;
-    {
-        NCursesApplication::shutdownNCurses();
-        system(command.str().c_str());
-        NCursesApplication::resumeNCurses();
-        refresh();
-    }
+
+    NCursesApplication::runExternalCommand(command.str());
     readBookmarksFromFile();
-    refresh();
+    reset(); // Cursor might be on the last entry and the user might deleted the last entry.
 }
 
 BookmarkItemPointer BookmarkMenu::chosenItem()
@@ -573,9 +587,9 @@ void BookmarkMenu::readBookmarksFromFile()
         istringstream lineStream(line);
         string bookmarkName;
         string bookmarkPath;
-        if (!getline(lineStream, bookmarkName, delimiter))
+        if (! getline(lineStream, bookmarkName, delimiter))
             NCursesApplication::error("Malformed line " + to_string(lineNumber) + " in " + filePath);
-        if (!getline(lineStream, bookmarkPath, delimiter))
+        if (! getline(lineStream, bookmarkPath, delimiter))
             NCursesApplication::error("Malformed line " + to_string(lineNumber) + " in " + filePath);
 
         rtrim(bookmarkName); // Don't trim in the beginning. User might want to indent.
@@ -601,7 +615,7 @@ static void writeResultToFile(const string resultPath, const string filePath)
 
 int main()
 {
-    ShellDirsApp app;
+    GotoApplication app;
 
     string resultPath = ".";
     BookmarkMenu menu(MenuItems(), &app);
