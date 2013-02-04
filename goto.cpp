@@ -1,28 +1,33 @@
-// Requirements
-//
-// Listing Bookmarks mode:
-//  <number> <name> <fullpath>
-//
-// Config file is ~/.goto.bookmarks
-//
-// Keys:
-//   Up, k, Down, j:    Move up and down the list.
-//   Home, End:         Select first, last item.
-//   Enter:             Go to selected directory.
-//   Number:            Select item with entered number.
-//   e:                 Open editor with bookmarks file.
-//   i:                 Enter filter mode. You can enter a pattern
-//                      and the filtered list will be shown.
-//                      In filter Mode:
-//                          Press any printable character to add it to the filter.
-//                          ESC aborts filtering.
-//   Esc:               Exit, e.g. stay in $CWD (or abort filter in filter mode).
-//
-//  Display:
-//    - DONE: Show path abbreviated (~ instead of $HOME).
-//    - TODO: Highlight not existent dirs (red).
-//    - TODO: Highlight bookmark if it's $CWD.
-//
+/// Requirements
+///
+/// Listing Bookmarks mode:
+///  <number> <name> <fullpath>
+///
+/// Config file is ~/.goto.bookmarks
+///
+/// Keys:
+///   Up, k, Down, j:    Move up and down the list.
+///   Home, End:         Select first, last item.
+///   Enter:             Go to selected directory.
+///   Digit:             Select item with by digit.
+///   e:                 Open editor with bookmarks file.
+///   TODO: i:           Enter filter mode. You can enter a pattern
+///                      and the filtered list will be shown.
+///                      In filter Mode:
+///                          Press any printable character to add it to the filter.
+///                          ESC aborts filtering.
+///   Esc:               Exit, e.g. stay in $CWD (or abort filter in filter mode).
+///
+///  Display:
+///    - DONE: Show path abbreviated (~ instead of $HOME).
+///    - TODO: Highlight not existent dirs (red).
+///    - TODO: Highlight bookmark if it's $CWD.
+///
+///  TODO: First start screen (for instructions)
+///  TODO: Help screen with all short cuts and modes.
+///  TODO: -help
+///  TODO: man page
+///
 
 #include <cctype>
 #include <cstdlib>
@@ -46,9 +51,6 @@ static const int KEY_ESC = 27;
 static const int KEY_RETURN = 10;
 static const char BookmarkFile[] = ".goto.bookmarks";
 static const char ResultFile[] = ".goto.result";
-
-static const int FILTERMENU_ROWS = 0; // full size
-static const int FILTERMENU_COLUMNS = 0; // full size
 
 // --- Debug & Assert -----------------------------------------------------------------------------
 
@@ -270,10 +272,39 @@ private:
     unsigned m_rowCount;
 };
 
+class StatusBar
+{
+public:
+    StatusBar(int rows, int columns, int beginY, int beginX)
+        : m_window(newwin(rows, columns, beginY, beginX))
+    {
+        setText(" Press RETURN to enter the directory ");
+        update();
+    }
+
+    ~StatusBar() { delwin(m_window); }
+
+    void setText(const string &text) { m_text = text; }
+
+    void update() {
+        wattron(m_window, A_BOLD);
+        mvwhline(m_window, 0, 0, ACS_HLINE, 1000); // TODO: Is it OK to use NCURSES_ACS?
+        mvwprintw(m_window, 0, 3, m_text.c_str());
+        wattroff(m_window, A_BOLD);
+
+        wrefresh(m_window);
+    }
+
+private:
+    string m_text;
+    WINDOW *m_window;
+};
+
 class FilterMenu : public IKeyHandler
 {
 public:
     FilterMenu(const MenuItems menuItems = MenuItems(), IKeyHandler *parentKeyHandler = 0);
+    ~FilterMenu() { delwin(m_window); }
 
     enum MenuResult { ItemChosen, NoItemChosen };
     int exec();
@@ -310,6 +341,7 @@ private:
     ScrollView m_scrollView;
     unsigned m_selectedRow;
     WINDOW *m_window;
+    StatusBar m_statusBar;
 };
 
 FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
@@ -318,12 +350,11 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
     , m_key(-1)
     , m_chosenItem(0)
     , m_parentKeyHandler(parentKeyHandler)
-    , m_scrollView(0, FILTERMENU_ROWS)
+    , m_scrollView(0, LINES - 2)
     , m_selectedRow(0)
-    , m_window(newwin(FILTERMENU_ROWS, FILTERMENU_COLUMNS, 0, 0))
+    , m_window(newwin(LINES - 1, COLS, 0, 0))
+    , m_statusBar(1, COLS, LINES - 1, 0)
 {
-//    box(m_menu_win, 0, 0);
-
     int windowColumns, windowRows;
     getmaxyx(m_window, windowRows, windowColumns);
     m_scrollView = ScrollView(0, windowRows);
@@ -366,6 +397,7 @@ void FilterMenu::reset()
     m_selectedRow = 0;
     m_scrollView.resetTo(0);
     wrefresh(m_window);
+    m_statusBar.update();
 }
 
 void FilterMenu::printMenu()
