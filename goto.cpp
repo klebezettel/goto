@@ -27,7 +27,17 @@
 ///  TODO: Help screen with all short cuts and modes.
 ///  TODO: -help
 ///  TODO: man page
+///  TODO: Comments in file (initial file contains format description in comment and some examples)
+///  TODO: Settings file
+///     Option: remember last selected entry
+///     Option: Enable/Disable/Show digit accesor column (first column)
 ///
+///  TEST: Call with empty file (--> welcome screen)
+///  TEST: Call with no file (--> welcome screen)
+///  TEST: Call with malformed line
+///
+///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
+///      --> showing as tabs?
 
 #include <cctype>
 #include <cstdlib>
