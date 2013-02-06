@@ -18,19 +18,50 @@
 ///                          ESC aborts filtering.
 ///   Esc:               Exit, e.g. stay in $CWD (or abort filter in filter mode).
 ///
-///  Display:
-///    - DONE: Show path abbreviated (~ instead of $HOME).
-///    - TODO: Highlight not existent dirs (red).
-///    - TODO: Highlight bookmark if it's $CWD.
+///  Fundamental use cases:
+///   (1) Navigate to a directory
+///   (2) Open/Edit a file
+///   (3) Give string of selected files/dirs. This is useful for
+///        Launching programs which are not in PATHs
+///        Parameterizing programs with files/paths
 ///
+///  Mode bar for use case 1/2: Bookmarks - Browse - Find Files - Locate Files
+///  Mode bar for use case 3: Path Chooser
+///
+///  General:
+///  TODO: Entering [a-zA-Z] starts filter (no j,k commands, but modifier needed!)
 ///  TODO: First start screen (for instructions)
 ///  TODO: Help screen with all short cuts and modes.
 ///  TODO: -help
 ///  TODO: man page
-///  TODO: Comments in file (initial file contains format description in comment and some examples)
+///  TODO: Home page
 ///  TODO: Settings file
 ///     Option: remember last selected entry
 ///     Option: Enable/Disable/Show digit accesor column (first column)
+///
+///  Platforms:
+///  TODO: Support for Mac OS X
+///  TODO: Support for Cygwin on Windows?
+///  TODO: Support for Windows?
+///
+///  Building/Packaging:
+///  TODO: Packages for: Debian, Ubuntu, SuSE, Fedora, Arch Linux, Gentoo
+///  TODO: Get rid of qmake dependency
+///
+///  Bookmarks:
+///  TODO: Comments in bookmark file (initial file contains format description in comment and
+///        some examples)
+///  TODO: For better visual structuring, allow empty lines (RETURN will not do anything)
+///        Status bar will be empty, not showing "Press RETURN to enter this directory"
+///  TODO: Enhance to general launcher/executer
+///        File: (1) Open with $EDITOR (2) Open with xdg-open (3) Execute if execute bit is set!
+///         Dir: (1) Go to location (2) Open with xdg-open (for image dirs e.g.)
+///
+///  Display:
+///  DONE: Show path abbreviated (~ instead of $HOME).
+///  TODO: Digit navigation for all entries? (line numbers)
+///  TODO: Highlight not existent dirs (red).
+///  TODO: Highlight bookmark if it's $CWD.
 ///
 ///  TEST: Call with empty file (--> welcome screen)
 ///  TEST: Call with no file (--> welcome screen)
