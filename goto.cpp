@@ -243,10 +243,10 @@ public:
 
 // --- Menus and Menu Items ----------------------------------------------------------------------
 
-class IMenuItem
+class AbstractMenuItem
 {
 public:
-    virtual ~IMenuItem() {}
+    virtual ~AbstractMenuItem() {}
     enum DisplayFlags { Default = 0x0, Attention = 0x1, Highlight = 0x2 };
 
     virtual string identifier() const = 0;
@@ -254,12 +254,14 @@ public:
 
     virtual string path() const = 0;
     virtual DisplayFlags pathTextFlags() const = 0;
+
+    bool isEmpty() { return identifier().empty() && path().empty(); }
 };
 
-typedef shared_ptr<IMenuItem> MenuItemPointer;
+typedef shared_ptr<AbstractMenuItem> MenuItemPointer;
 typedef vector<MenuItemPointer> MenuItems;
 
-class BookmarkItem : public IMenuItem {
+class BookmarkItem : public AbstractMenuItem {
 public:
     BookmarkItem(const string name, const string path) : m_name(name), m_path(path) {}
     string identifier() const { return m_name; }
@@ -271,8 +273,8 @@ public:
             return string(m_path).replace(0, homePathLength, "~");
         return m_path;
     }
-    DisplayFlags identifierTextFlags() const { return IMenuItem::Default; }
-    DisplayFlags pathTextFlags() const { return IMenuItem::Default; }
+    DisplayFlags identifierTextFlags() const { return AbstractMenuItem::Default; }
+    DisplayFlags pathTextFlags() const { return AbstractMenuItem::Default; }
 
     string path() { return m_path; }
 private:
@@ -444,6 +446,9 @@ void FilterMenu::reset()
 
 void FilterMenu::printMenu()
 {
+    if (m_menuItems.empty())
+        return;
+
     const int x = 0;
     int y = 0;
 
@@ -455,22 +460,33 @@ void FilterMenu::printMenu()
             firstColumnWidth = width;
     }
 
+    // Find first visible digit accessor
+    unsigned firstRow = m_scrollView.firstRow();
+    unsigned digitAccessor = 0;
+    for (unsigned i = 0; i <= firstRow; ++i) {
+        if (! m_menuItems.at(i)->isEmpty())
+            ++digitAccessor;
+    }
+    --digitAccessor;
+
     // Print them
     unsigned int to = m_menuItems.size() - 1 < m_scrollView.lastRow()
         ? m_menuItems.size() - 1
         : m_scrollView.lastRow();
-    for (unsigned i = m_scrollView.firstRow(); i <= to; ++i, ++y) {
+    for (unsigned i = firstRow; i <= to; ++i, ++y) {
         const MenuItemPointer item = m_menuItems.at(i);
         const bool isCurrentItem = m_selectedRow == i;
-        const bool shouldBeHighlighted = item->identifierTextFlags() & IMenuItem::Highlight;
-        const bool shouldStandOut = item->identifierTextFlags() & IMenuItem::Attention;
+        const bool shouldBeHighlighted = item->identifierTextFlags() & AbstractMenuItem::Highlight;
+        const bool shouldStandOut = item->identifierTextFlags() & AbstractMenuItem::Attention;
 
         stringstream ss;
         ss << left << setw(firstColumnWidth) << item->identifier();
         const string paddedDisplayText = ss.str();
-        const string digitAccessor = i <= 9 ? to_string(i).c_str() : "";
-        int attributes = 0;
+        string digitAccessorString;
+        if (digitAccessor <= 9 && ! item->isEmpty())
+            digitAccessorString = to_string(digitAccessor++);
 
+        int attributes = 0;
         if (isCurrentItem)
             attributes |= A_REVERSE;
         if (shouldBeHighlighted)
@@ -481,8 +497,8 @@ void FilterMenu::printMenu()
         // Clear line
         mvwhline(m_window, y, x, NCURSES_ACS(' '), 1000); // TODO: Is it OK to use NCURSES_ACS?
         // Write line
-        mvwprintw(m_window, y, x, "%2s %s %s ", digitAccessor.c_str(), paddedDisplayText.c_str(),
-                  item->path().c_str());
+        mvwprintw(m_window, y, x, "%2s %s %s ", digitAccessorString.c_str(),
+                  paddedDisplayText.c_str(), item->path().c_str());
         wattroff(m_window, attributes);
     }
     wrefresh(m_window);
@@ -506,11 +522,23 @@ void FilterMenu::navigateToEnd()
 
 void FilterMenu::navigateByDigit()
 {
-    const unsigned newRow = m_key - '0';
+    const unsigned digit = m_key - '0';
     const unsigned lastRow = m_menuItems.size() - 1;
-    m_selectedRow = newRow <= lastRow ? newRow : lastRow;
-    if (m_selectedRow < m_scrollView.firstRow())
-        m_scrollView.resetTo(m_selectedRow);
+
+    for (unsigned i = 0, digitCounter = 0; i <= lastRow; ++i) {
+        if (m_menuItems.at(i)->isEmpty())
+            continue;
+
+        if (digitCounter == digit) {
+            const unsigned newRow = i;
+            m_selectedRow = newRow <= lastRow ? newRow : lastRow;
+            if (m_selectedRow < m_scrollView.firstRow())
+                m_scrollView.resetTo(m_selectedRow);
+            return;
+        }
+
+        ++digitCounter;
+    }
 }
 
 void FilterMenu::navigateEntryUp()
@@ -651,26 +679,43 @@ void BookmarkMenu::readBookmarksFromFile()
     m_menuItems.clear();
     string line;
     const char delimiter = ',';
+    bool lastLineWasEmpty = false;
     for (unsigned lineNumber = 1; file && getline(file, line); ++lineNumber) {
-        // Skip empty lines
+        // Merge multiple empty lines to one entry
         string copiedLine(line);
-        if (trim(copiedLine).empty())
-            continue;
+        const bool isEmptyLine = trim(copiedLine).empty();
+        if (lastLineWasEmpty) {
+            if (isEmptyLine)
+                continue;
+            else
+                lastLineWasEmpty = false;
+        } else {
+            if (isEmptyLine)
+                lastLineWasEmpty = true;
+        }
 
         // Parse line
-        istringstream lineStream(line);
         string bookmarkName;
         string bookmarkPath;
-        if (! getline(lineStream, bookmarkName, delimiter))
-            NCursesApplication::error("Malformed line " + to_string(lineNumber) + " in " + filePath);
-        if (! getline(lineStream, bookmarkPath, delimiter))
-            NCursesApplication::error("Malformed line " + to_string(lineNumber) + " in " + filePath);
+        if (! isEmptyLine) {
+            istringstream lineStream(line);
+            const bool gotBookmarkName = getline(lineStream, bookmarkName, delimiter);
+            const bool gotBookmarkPath = getline(lineStream, bookmarkPath, delimiter);
+            if (! gotBookmarkName || ! gotBookmarkPath) {
+                const string reason = "Malformed line " + to_string(lineNumber) + " in " + filePath;
+                NCursesApplication::error(reason);
+            }
+        }
 
         rtrim(bookmarkName); // Don't trim in the beginning. User might want to indent.
         trim(bookmarkPath);
 
         m_menuItems.push_back(BookmarkItemPointer(new BookmarkItem(bookmarkName, bookmarkPath)));
     }
+
+    // Discard only line or last line if it is empty.
+    if (! m_menuItems.empty() && m_menuItems.back()->isEmpty())
+            m_menuItems.pop_back();
 
     file.close();
 }
