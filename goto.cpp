@@ -440,7 +440,12 @@ void FilterMenu::reset()
 {
     m_selectedRow = 0;
     m_scrollView.resetTo(0);
-    wrefresh(m_window);
+    // If the last entry is removed from the bookmarks file,
+    // the menu is printed in its new dimensions. But the
+    // last line is left on the screen. Therefore, clear the
+    // window completely instead of doing just a refresh.
+    // The refresh will be triggered anyway at printMenu().
+    wclear(m_window);
     m_statusBar.update();
 }
 
