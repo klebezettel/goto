@@ -56,6 +56,7 @@
 ///  TODO: Enhance to general launcher/executer
 ///        File: (1) Open with $EDITOR (2) Open with xdg-open (3) Execute if execute bit is set!
 ///         Dir: (1) Go to location (2) Open with xdg-open (for image dirs e.g.)
+///  TODO: Directory dependent bookmarks/actions!
 ///
 ///  Display:
 ///  DONE: Show path abbreviated (~ instead of $HOME).
