@@ -97,31 +97,26 @@ static const char ResultFile[] = ".goto.result";
 // --- Debug & Assert -----------------------------------------------------------------------------
 
 #define DEBUG_OUTPUT 0
+
 /// Ncurses apps cannot just print to stdout/stderr, so print to a file
 class DebugOutput
 {
 #if DEBUG_OUTPUT
-    ofstream m_file;
+    ofstream *stream;
 #endif
 public:
 #if DEBUG_OUTPUT
-    explicit DebugOutput(const char *filePath)
-        : m_file(filePath)
-    {
-        if (! m_file)
-            exit(EXIT_FAILURE);
-    }
-
-    ~DebugOutput() { m_file << endl << flush; }
+    explicit DebugOutput(ofstream *stream = 0) : stream(stream) {}
+    ~DebugOutput() { *stream << endl << flush; }
 #else
-    explicit DebugOutput(const char *) {}
+    explicit DebugOutput(ofstream * = 0) {}
 #endif
 
 #if DEBUG_OUTPUT
 #define OUT_OPERATOR(type) \
     DebugOutput &operator<<(const type value) \
     { \
-        m_file << value << endl << flush; \
+        *stream << value << ' '; \
         return *this; \
     }
 #else
@@ -136,15 +131,20 @@ public:
     OUT_OPERATOR(int)
 };
 
-// TODO: Would be nice to append 'endl' after all '<<' operations are done.
-static DebugOutput &debug() {
-    static DebugOutput out("/tmp/goto_debug.log");
-    return out;
+/// debug(): Return DebugOutput object for printing. Usage: debug() << "hello";
+static DebugOutput debug() {
+#if DEBUG_OUTPUT
+    static ofstream stream("/tmp/goto_debug.log");
+    return DebugOutput(&stream);
+#else
+    return DebugOutput();
+#endif
 }
 
-/// Just a soft assert
-#define assert(condition) \
-    if (!(condition)) { debug() << "Assertion failed: " << #condition; }
+/// assert(condition): Ensure condition is true, otherwise print the failed condition with debug().
+#define assert(condition) assert_helper(condition, __FILE__, __LINE__)
+#define assert_helper(condition, file, line) \
+    if (!(condition)) { debug() << file << line << "Assertion failed: " << #condition; }
 
 // --- Utils --------------------------------------------------------------------------------------
 
