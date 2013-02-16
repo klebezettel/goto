@@ -71,6 +71,8 @@
 ///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
 ///      --> showing as tabs?
 
+/// BUG: Digit navigation and scrolling! Make window only some rows high and then hit '7' or so.
+
 #include <cctype>
 #include <cstdlib>
 
@@ -86,6 +88,11 @@
 #include <vector>
 
 #include <ncurses.h>
+
+// For stat():
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -148,6 +155,36 @@ static DebugOutput debug() {
 
 // --- Utils --------------------------------------------------------------------------------------
 
+namespace Utils {
+
+// TODO: Not portable
+class FileInfo
+{
+public:
+    FileInfo(const string &filePath)
+        : exists(false), isRegularFile(false), isDirectory(false)
+    {
+        struct stat s;
+        const int err = stat(filePath.c_str(), &s);
+        if(err == -1) {
+            if(ENOENT != errno) {
+                perror("stat");
+                exit(1);
+            }
+        } else {
+            exists = true;
+            if (s.st_mode & S_IFDIR )
+                isDirectory = true;
+            else if(s.st_mode & S_IFREG )
+                isRegularFile = true;
+        }
+    }
+
+    bool exists : 1;
+    bool isRegularFile : 1;
+    bool isDirectory : 1;
+};
+
 static inline string &ltrim(std::string &s) {
     s.erase(s.begin(), std::find_if(
         s.begin(),
@@ -170,21 +207,61 @@ static inline string &trim(std::string &s) {
     return ltrim(rtrim(s));
 }
 
+} // namespace Utils
+
 // --- Application classes ------------------------------------------------------------------------
 
 class NCursesApplication
 {
 public:
+
+    enum Color {
+        ColorDefault, ColorRed, ColorGreen, ColorYellow,
+        ColorBlue, ColorMagenta, ColorCyan, ColorWhite
+    };
+
     NCursesApplication()
     {
         initscr();
+        start_color();
         cbreak();
         noecho();
         keypad(stdscr, TRUE); // Enables us to catch arrow presses.
         curs_set(0);
+
+        if (has_colors()) {
+            // Enable '-1' in the following lines for the default terminal color.
+            use_default_colors();
+
+            init_pair(ColorDefault, COLOR_BLACK, -1);
+            init_pair(ColorRed, COLOR_RED, -1);
+            init_pair(ColorGreen, COLOR_GREEN, -1);
+            init_pair(ColorYellow, COLOR_YELLOW, -1);
+            init_pair(ColorBlue, COLOR_BLUE, -1);
+            init_pair(ColorMagenta, COLOR_MAGENTA, -1);
+            init_pair(ColorCyan, COLOR_CYAN, -1);
+            init_pair(ColorWhite, COLOR_WHITE, -1);
+        }
     }
 
     ~NCursesApplication() { shutdownNCurses(); }
+
+    static bool supportsColors()
+    {
+        // The function can_change_color() returns false for
+        //   gnome-terminal 3.6.0
+        //   XTerm(278)
+        //   konsole 2.9.4
+        // Therefore we will have no colors on these terminal
+        // if we rely on that.
+        return has_colors() /*&& can_change_color()*/;
+    }
+
+    static void useColor(WINDOW *window, Color color)
+    {
+        if (supportsColors())
+             wcolor_set(window, color, 0);
+    }
 
     static void runExternalCommand(const string &command)
     {
@@ -247,15 +324,12 @@ class AbstractMenuItem
 {
 public:
     virtual ~AbstractMenuItem() {}
-    enum DisplayFlags { Default = 0x0, Attention = 0x1, Highlight = 0x2 };
 
     virtual string identifier() const = 0;
-    virtual DisplayFlags identifierTextFlags() const = 0;
-
     virtual string path() const = 0;
-    virtual DisplayFlags pathTextFlags() const = 0;
+    virtual string pathDisplayed() const { return path(); }
 
-    bool isEmpty() { return identifier().empty() && path().empty(); }
+    virtual bool isEmpty() { return identifier().empty() && path().empty(); }
 };
 
 typedef shared_ptr<AbstractMenuItem> MenuItemPointer;
@@ -265,21 +339,59 @@ class BookmarkItem : public AbstractMenuItem {
 public:
     BookmarkItem(const string name, const string path) : m_name(name), m_path(path) {}
     string identifier() const { return m_name; }
-    string path() const
-    {
+    string path() const { return m_path; }
+    string pathDisplayed() const {
         const string homePath = getEnvironmentVariableOrDie("HOME");
         const int homePathLength = homePath.size();
-        if (! m_path.compare(0, homePathLength, homePath))
-            return string(m_path).replace(0, homePathLength, "~");
-        return m_path;
+        const string path = this->path();
+        if (! path.compare(0, homePathLength, homePath))
+            return string(path).replace(0, homePathLength, "~");
+        return path;
     }
-    DisplayFlags identifierTextFlags() const { return AbstractMenuItem::Default; }
-    DisplayFlags pathTextFlags() const { return AbstractMenuItem::Default; }
 
     string path() { return m_path; }
 private:
     const string m_name;
     const string m_path;
+};
+
+// TODO: Introduce abstract class
+class BookmarkItemHints
+{
+public:
+    BookmarkItemHints(const MenuItemPointer item)
+        : color(NCursesApplication::ColorDefault)
+        , attributes(0)
+    {
+        assert(item);
+
+        if (! item->isEmpty()) {
+            const string path = item->path();
+            Utils::FileInfo fileInfo(path);
+
+            if (fileInfo.exists) {
+                if (fileInfo.isDirectory) {
+                    hint = " Press RETURN to enter the directory ";
+                    if (NCursesApplication::supportsColors())
+                        color = NCursesApplication::ColorBlue;
+                    else
+                        attributes |= A_BOLD;
+                } else {
+                    hint = " TODO: Proper hint ";
+                }
+            } else {
+                if (NCursesApplication::supportsColors())
+                    color = NCursesApplication::ColorRed;
+                else
+                    attributes |= A_UNDERLINE;
+                hint = " Error: File or directory does not exist ";
+            }
+        }
+    }
+
+    NCursesApplication::Color color;
+    int attributes;
+    string hint;
 };
 
 typedef function<void()> KeyHandlerFunction;
@@ -320,27 +432,34 @@ class StatusBar
 {
 public:
     StatusBar(int rows, int columns, int beginY, int beginX)
-        : m_window(newwin(rows, columns, beginY, beginX))
+        : m_textAttributes(0)
+        , m_window(newwin(rows, columns, beginY, beginX))
     {
-        setText(" Press RETURN to enter the directory ");
-        update();
     }
 
     ~StatusBar() { delwin(m_window); }
 
-    void setText(const string &text) { m_text = text; }
+    void setText(const string &text, int attributes, NCursesApplication::Color color)
+    { m_text = text; m_textAttributes = attributes; m_textColor = color; }
 
     void update() {
+        wattrset(m_window, 0);
         wattron(m_window, A_BOLD);
         mvwhline(m_window, 0, 0, ACS_HLINE, 1000); // TODO: Is it OK to use NCURSES_ACS?
-        mvwprintw(m_window, 0, 3, m_text.c_str());
-        wattroff(m_window, A_BOLD);
 
+        wattrset(m_window, 0);
+        NCursesApplication::useColor(m_window, m_textColor);
+        wattron(m_window, m_textAttributes);
+        mvwprintw(m_window, 0, 3, m_text.c_str());
+
+        wattrset(m_window, 0);
         wrefresh(m_window);
     }
 
 private:
     string m_text;
+    int m_textAttributes;
+    NCursesApplication::Color m_textColor;
     WINDOW *m_window;
 };
 
@@ -356,7 +475,9 @@ public:
 
     void reset();
 
-    void printMenu();
+    void updateMenu();
+    void updateStatusBar();
+
     void navigateEntryUp();
     void navigateEntryDown();
     void navigatePageUp();
@@ -422,7 +543,8 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
 int FilterMenu::exec()
 {
     while (! m_chosenItem) {
-        printMenu();
+        updateMenu();
+        updateStatusBar();
         m_key = wgetch(m_window);
         if (! handleKey(m_key) && m_parentKeyHandler)
             m_parentKeyHandler->handleKey(m_key);
@@ -449,7 +571,7 @@ void FilterMenu::reset()
     m_statusBar.update();
 }
 
-void FilterMenu::printMenu()
+void FilterMenu::updateMenu()
 {
     if (m_menuItems.empty())
         return;
@@ -481,8 +603,6 @@ void FilterMenu::printMenu()
     for (unsigned i = firstRow; i <= to; ++i, ++y) {
         const MenuItemPointer item = m_menuItems.at(i);
         const bool isCurrentItem = m_selectedRow == i;
-        const bool shouldBeHighlighted = item->identifierTextFlags() & AbstractMenuItem::Highlight;
-        const bool shouldStandOut = item->identifierTextFlags() & AbstractMenuItem::Attention;
 
         stringstream ss;
         ss << left << setw(firstColumnWidth) << item->identifier();
@@ -491,22 +611,45 @@ void FilterMenu::printMenu()
         if (digitAccessor <= 9 && ! item->isEmpty())
             digitAccessorString = to_string(digitAccessor++);
 
+        BookmarkItemHints hints(item);
         int attributes = 0;
         if (isCurrentItem)
             attributes |= A_REVERSE;
-        if (shouldBeHighlighted)
-            attributes |= A_BOLD;
-        if (shouldStandOut)
-            attributes |= A_UNDERLINE;
+
+        wattrset(m_window, 0);
         wattron(m_window, attributes);
+
         // Clear line
         mvwhline(m_window, y, x, NCURSES_ACS(' '), 1000); // TODO: Is it OK to use NCURSES_ACS?
+
         // Write line
-        mvwprintw(m_window, y, x, "%2s %s %s ", digitAccessorString.c_str(),
-                  paddedDisplayText.c_str(), item->path().c_str());
+        mvwprintw(m_window, y, x, "%2s %s ", digitAccessorString.c_str(),
+                  paddedDisplayText.c_str());
+
+        if (NCursesApplication::supportsColors()) {
+            if (! isCurrentItem)
+                NCursesApplication::useColor(m_window, hints.color);
+        } else {
+            attributes |= hints.attributes;
+            wattron(m_window, attributes);
+        }
+
+        mvwprintw(m_window, y, x + 3 + firstColumnWidth + 1, "%s ",
+                  item->pathDisplayed().c_str());
+
         wattroff(m_window, attributes);
     }
-    wrefresh(m_window);
+}
+
+void FilterMenu::updateStatusBar()
+{
+    assert(m_selectedRow < m_menuItems.size());
+    MenuItemPointer selectedItem = m_menuItems.at(m_selectedRow);
+
+    BookmarkItemHints hints(selectedItem);
+
+    m_statusBar.setText(hints.hint, hints.attributes, hints.color);
+    m_statusBar.update();
 }
 
 void FilterMenu::navigateToStart()
@@ -688,7 +831,7 @@ void BookmarkMenu::readBookmarksFromFile()
     for (unsigned lineNumber = 1; file && getline(file, line); ++lineNumber) {
         // Merge multiple empty lines to one entry
         string copiedLine(line);
-        const bool isEmptyLine = trim(copiedLine).empty();
+        const bool isEmptyLine = Utils::trim(copiedLine).empty();
         if (lastLineWasEmpty) {
             if (isEmptyLine)
                 continue;
@@ -712,8 +855,8 @@ void BookmarkMenu::readBookmarksFromFile()
             }
         }
 
-        rtrim(bookmarkName); // Don't trim in the beginning. User might want to indent.
-        trim(bookmarkPath);
+        Utils::rtrim(bookmarkName); // Don't trim in the beginning. User might want to indent.
+        Utils::trim(bookmarkPath);
 
         m_menuItems.push_back(BookmarkItemPointer(new BookmarkItem(bookmarkName, bookmarkPath)));
     }
