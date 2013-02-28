@@ -70,6 +70,7 @@
 ///      --> showing as tabs?
 
 /// BUG: Digit navigation and scrolling! Make window only some rows high and then hit '7' or so.
+/// BUG: Make window only some rows high: Then scroll and see how the digits are jumping to other entries.q
 
 #include <cctype>
 #include <cstdlib>
@@ -409,16 +410,20 @@ public:
     unsigned lastRow() { return m_firstRow + m_rowCount - 1; }
     void resetTo(unsigned firstRow) { m_firstRow = firstRow; }
 
-    void moveDown()
+    void moveDown(int times = 1)
     {
-        ++m_firstRow;
-        assert(m_firstRow != std::numeric_limits<unsigned>::max());
+        while (times--) {
+            ++m_firstRow;
+            assert(m_firstRow != std::numeric_limits<unsigned>::max());
+        }
     }
 
-    void moveUp()
+    void moveUp(int times = 1)
     {
-        --m_firstRow;
-        assert(m_firstRow != std::numeric_limits<unsigned>::max());
+        while (times--) {
+            --m_firstRow;
+            assert(m_firstRow != std::numeric_limits<unsigned>::max());
+        }
     }
 
 private:
