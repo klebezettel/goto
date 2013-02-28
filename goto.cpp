@@ -69,9 +69,6 @@
 ///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
 ///      --> showing as tabs?
 
-/// BUG: Digit navigation and scrolling! Make window only some rows high and then hit '7' or so.
-/// BUG: Make window only some rows high: Then scroll and see how the digits are jumping to other entries.q
-
 #include <cctype>
 #include <cstdlib>
 
@@ -408,9 +405,13 @@ public:
 
     unsigned firstRow() { return m_firstRow; }
     unsigned lastRow() { return m_firstRow + m_rowCount - 1; }
+
+    bool isRowBefore(unsigned row) { return row < m_firstRow; }
+    bool isRowBehind(unsigned row) { return lastRow() < row; }
+
     void resetTo(unsigned firstRow) { m_firstRow = firstRow; }
 
-    void moveDown(int times = 1)
+    void moveDown(unsigned times = 1)
     {
         while (times--) {
             ++m_firstRow;
@@ -418,7 +419,7 @@ public:
         }
     }
 
-    void moveUp(int times = 1)
+    void moveUp(unsigned times = 1)
     {
         while (times--) {
             --m_firstRow;
@@ -591,13 +592,12 @@ void FilterMenu::updateMenu()
     }
 
     // Find first visible digit accessor
-    unsigned firstRow = m_scrollView.firstRow();
+    const unsigned firstRow = m_scrollView.firstRow();
     unsigned digitAccessor = 0;
-    for (unsigned i = 0; i <= firstRow; ++i) {
+    for (unsigned i = 0; i < firstRow; ++i) {
         if (! m_menuItems.at(i)->isEmpty())
             ++digitAccessor;
     }
-    --digitAccessor;
 
     // Print them
     unsigned int to = m_menuItems.size() - 1 < m_scrollView.lastRow()
@@ -683,8 +683,16 @@ void FilterMenu::navigateByDigit()
         if (digitCounter == digit) {
             const unsigned newRow = i;
             m_selectedRow = newRow <= lastRow ? newRow : lastRow;
-            if (m_selectedRow < m_scrollView.firstRow())
+            if (m_scrollView.isRowBefore(m_selectedRow)) {
                 m_scrollView.resetTo(m_selectedRow);
+            } else if (m_scrollView.isRowBehind(m_selectedRow)) {
+                const unsigned countFollowingEntries = lastRow - m_selectedRow;
+                const unsigned scrollViewRowCount = m_scrollView.rowCount();
+                const unsigned newFirstRowOfScrollView = countFollowingEntries >= scrollViewRowCount
+                    ? m_selectedRow
+                    : m_selectedRow - (scrollViewRowCount - 1 - countFollowingEntries);
+                m_scrollView.resetTo(newFirstRowOfScrollView);
+            }
             return;
         }
 
@@ -698,12 +706,13 @@ void FilterMenu::navigateEntryUp()
         if (m_optionWrapOnEntryNavigation)
             navigateToEnd();
     } else {
+        const unsigned originalSelectedRow = m_selectedRow;
         while (m_menuItems.at(--m_selectedRow)->isEmpty());
 
         const bool nonVisibleItemsBefore = m_scrollView.firstRow() != 0;
-        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.firstRow() - 1;
+        const bool selectedLineWouldBeInvisible = m_selectedRow <= m_scrollView.firstRow() - 1;
         if (nonVisibleItemsBefore && selectedLineWouldBeInvisible)
-            m_scrollView.moveUp();
+            m_scrollView.moveUp(originalSelectedRow - m_selectedRow);
     }
 }
 
@@ -713,12 +722,13 @@ void FilterMenu::navigateEntryDown()
         if (m_optionWrapOnEntryNavigation)
             navigateToStart();
     } else {
+        const unsigned originalSelectedRow = m_selectedRow;
         while (m_menuItems.at(++m_selectedRow)->isEmpty());
 
         const bool nonVisibleItemsFollowing = m_scrollView.lastRow() < m_menuItems.size() - 1;
-        const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.lastRow() + 1;
+        const bool selectedLineWouldBeInvisible = m_selectedRow >= m_scrollView.lastRow() + 1;
         if (nonVisibleItemsFollowing && selectedLineWouldBeInvisible)
-            m_scrollView.moveDown();
+            m_scrollView.moveDown(m_selectedRow - originalSelectedRow);
     }
 
     wrefresh(m_window);
@@ -731,7 +741,7 @@ void FilterMenu::navigatePageUp()
         return;
     }
 
-    int newFirstRow = m_scrollView.firstRow() - m_scrollView.rowCount();
+    const int newFirstRow = m_scrollView.firstRow() - m_scrollView.rowCount();
     if (newFirstRow > 0) {
         m_selectedRow = newFirstRow;
         m_scrollView.resetTo(newFirstRow);
