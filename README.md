@@ -20,21 +20,22 @@ Setup instructions
 		function to()
 		{
 		  goto
+
 		  # If the user aborts by Ctrl-C there will be no result file, so check first.
 		  result_file=$HOME/.goto.result
 		  if [ -f "$result_file" ]; then
-		      result_path=`cat $result_file`
-		      rm $result_file
+			result_path=`cat $result_file`
+			rm $result_file
 		  else
-		      result_path="."
+			result_path="."
 		  fi
 		  cd $result_path;
 		}
-	
-		# Convenience, bind to() to Ctrl-F.
+
+		# Convenience, bind to() to Alt+`
 		# This is zsh specific. Adapt to your shell.
 		# ^q: Evaluate the next stuff isolated from so far entered text.
-		bindkey -s '^f' '^qto\n'
+		bindkey -s '`' '^qto\n' 
 
 Run instructions
 ----------------
