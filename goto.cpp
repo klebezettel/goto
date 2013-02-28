@@ -51,8 +51,6 @@
 ///  Bookmarks:
 ///  TODO: Comments in bookmark file (initial file contains format description in comment and
 ///        some examples)
-///  TODO: For better visual structuring, allow empty lines (RETURN will not do anything)
-///        Status bar will be empty, not showing "Press RETURN to enter this directory"
 ///  TODO: Enhance to general launcher/executer
 ///        File: (1) Open with $EDITOR (2) Open with xdg-open (3) Execute if execute bit is set!
 ///         Dir: (1) Go to location (2) Open with xdg-open (for image dirs e.g.)
