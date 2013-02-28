@@ -158,7 +158,7 @@ class FileInfo
 {
 public:
     FileInfo(const string &filePath)
-        : exists(false), isRegularFile(false), isDirectory(false)
+        : exists(false), isRegularFile(false), isDirectory(false), isExecutable(false)
     {
         struct stat s;
         const int err = stat(filePath.c_str(), &s);
@@ -169,9 +169,11 @@ public:
             }
         } else {
             exists = true;
+            if (s.st_mode & S_IXUSR) // TODO: This is not enough if we are not the owner.
+                isExecutable = true;
             if (s.st_mode & S_IFDIR )
                 isDirectory = true;
-            else if(s.st_mode & S_IFREG )
+            else if (s.st_mode & S_IFREG )
                 isRegularFile = true;
         }
     }
@@ -179,6 +181,7 @@ public:
     bool exists : 1;
     bool isRegularFile : 1;
     bool isDirectory : 1;
+    bool isExecutable : 1;
 };
 
 static inline string &ltrim(std::string &s) {
@@ -210,7 +213,6 @@ static inline string &trim(std::string &s) {
 class NCursesApplication
 {
 public:
-
     enum Color {
         ColorDefault, ColorRed, ColorGreen, ColorYellow,
         ColorBlue, ColorMagenta, ColorCyan, ColorWhite
@@ -352,10 +354,10 @@ private:
 };
 
 // TODO: Introduce abstract class
-class BookmarkItemHints
+class BookmarkItemVisualHints
 {
 public:
-    BookmarkItemHints(const MenuItemPointer item)
+    BookmarkItemVisualHints(const MenuItemPointer item)
         : color(NCursesApplication::ColorDefault)
         , attributes(0)
     {
@@ -388,6 +390,32 @@ public:
     NCursesApplication::Color color;
     int attributes;
     string hint;
+};
+
+class PathHandlerHint
+{
+public:
+    PathHandlerHint(const string path)
+        : hint(NoHandlerHint)
+    {
+        assert(!path.empty());
+        Utils::FileInfo fileInfo(path);
+        assert(fileInfo.exists);
+
+        if (fileInfo.isDirectory) {
+            hint = ChangeToDirectory;
+        } else {
+            hint = fileInfo.isExecutable
+                ? ExecuteApplication : OpenWithDefaultApplication;
+        }
+    }
+
+    enum Hint {
+        NoHandlerHint,
+        ChangeToDirectory,
+        ExecuteApplication,
+        OpenWithDefaultApplication
+    } hint;
 };
 
 typedef function<void()> KeyHandlerFunction;
@@ -500,7 +528,7 @@ private:
     bool handleKey(int key);
 
     /// When true, jump to the first entry if pressing down arrow on last
-    /// item and jump to the last entry if pressing uparrow on first item.
+    /// item and jump to the last entry if pressing up arrow on first item.
     bool m_optionWrapOnEntryNavigation;
 
     int m_key;
@@ -614,7 +642,7 @@ void FilterMenu::updateMenu()
         if (digitAccessor <= 9 && ! item->isEmpty())
             digitAccessorString = to_string(digitAccessor++);
 
-        BookmarkItemHints hints(item);
+        BookmarkItemVisualHints hints(item);
         int attributes = 0;
         if (isCurrentItem)
             attributes |= A_REVERSE;
@@ -649,7 +677,7 @@ void FilterMenu::updateStatusBar()
     assert(m_selectedRow < m_menuItems.size());
     MenuItemPointer selectedItem = m_menuItems.at(m_selectedRow);
 
-    BookmarkItemHints hints(selectedItem);
+    BookmarkItemVisualHints hints(selectedItem);
 
     m_statusBar.setText(hints.hint, hints.attributes, hints.color);
     m_statusBar.update();
@@ -883,12 +911,12 @@ void BookmarkMenu::readBookmarksFromFile()
     file.close();
 }
 
-static void writeResultToFile(const string resultPath, const string filePath)
+static void writeFile(const string filePath, const string fileContents)
 {
     ofstream file(filePath);
     if (! file)
         NCursesApplication::error("Could not open file \"" + filePath + "\" for writing");
-    file << resultPath << flush;
+    file << fileContents << flush;
     if (! file)
         NCursesApplication::error("Failed to write file  \"" + filePath + "\"");
 }
@@ -899,16 +927,35 @@ int main()
 {
     GotoApplication app;
 
-    string resultPath = ".";
     BookmarkMenu menu(MenuItems(), &app);
-    if (menu.exec() == FilterMenu::ItemChosen)
-        resultPath = menu.chosenItem()->path();
+    menu.exec(); // Block until the user decided for an item.
+
+    BookmarkItemPointer item = menu.chosenItem();
+    assert(item);
+    PathHandlerHint handlerHint(item->path());
+    assert(handlerHint.hint != PathHandlerHint::NoHandlerHint);
+
+    // TODO: Make this portable
+    string command;
+    switch (handlerHint.hint) {
+    case PathHandlerHint::ChangeToDirectory:
+        command = "cd \"" + item->path() + '"';
+        break;
+    case PathHandlerHint::ExecuteApplication:
+        command = '"' + item->path() + '"';
+        break;
+    case PathHandlerHint::OpenWithDefaultApplication:
+        command = "xdg-open \"" + item->path() + '"';
+        break;
+    default:
+        command = "Ops, could not determine command to handle path \"" + item->path() + "\".";
+    }
 
     // No result file is written if the user aborts by e.g. Ctrl-C since we
     // never will get to this point.  This is OK since the shell function
     // handles this case.
-    const string resultFilePath = getEnvironmentVariableOrDie("HOME") + "/" + ResultFile;
-    writeResultToFile(resultPath, resultFilePath);
+    const string filePath = getEnvironmentVariableOrDie("HOME") + "/" + ResultFile;
+    writeFile(filePath, command);
 
     return EXIT_SUCCESS;
 }
