@@ -695,7 +695,8 @@ void FilterMenu::navigateEntryUp()
         if (m_optionWrapOnEntryNavigation)
             navigateToEnd();
     } else {
-        --m_selectedRow;
+        while (m_menuItems.at(--m_selectedRow)->isEmpty());
+
         const bool nonVisibleItemsBefore = m_scrollView.firstRow() != 0;
         const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.firstRow() - 1;
         if (nonVisibleItemsBefore && selectedLineWouldBeInvisible)
@@ -708,8 +709,9 @@ void FilterMenu::navigateEntryDown()
     if (m_selectedRow == m_menuItems.size() - 1) {
         if (m_optionWrapOnEntryNavigation)
             navigateToStart();
-    }  else {
-        ++m_selectedRow;
+    } else {
+        while (m_menuItems.at(++m_selectedRow)->isEmpty());
+
         const bool nonVisibleItemsFollowing = m_scrollView.lastRow() < m_menuItems.size() - 1;
         const bool selectedLineWouldBeInvisible = m_selectedRow == m_scrollView.lastRow() + 1;
         if (nonVisibleItemsFollowing && selectedLineWouldBeInvisible)
