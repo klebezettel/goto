@@ -57,10 +57,7 @@
 ///  TODO: Directory dependent bookmarks/actions!
 ///
 ///  Display:
-///  DONE: Show path abbreviated (~ instead of $HOME).
 ///  TODO: Digit navigation for all entries? (line numbers)
-///  TODO: Highlight not existent dirs (red).
-///  TODO: Highlight bookmark if it's $CWD.
 ///
 ///  TEST: Call with empty file (--> welcome screen)
 ///  TEST: Call with no file (--> welcome screen)
@@ -222,7 +219,7 @@ public:
     {
         initscr();
         start_color();
-        cbreak();
+        raw(); // Pass through all keys (interrupt, quit, suspend and flow control)
         noecho();
         keypad(stdscr, TRUE); // Enables us to catch arrow presses.
         curs_set(0);
@@ -582,6 +579,7 @@ int FilterMenu::exec()
         updateMenu();
         updateStatusBar();
         m_key = wgetch(m_window);
+        debug() << "Key:" << m_key;
         if (! handleKey(m_key) && m_parentKeyHandler)
             m_parentKeyHandler->handleKey(m_key);
     }
