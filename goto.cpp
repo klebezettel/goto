@@ -295,15 +295,32 @@ static inline string getEnvironmentVariableOrDie(const char * const name)
 class IKeyHandler
 {
 public:
-    virtual bool handleKey(int key) = 0;
+    struct KeyPress {
+        KeyPress(int key, bool escapePreceded = false)
+            : key(key), escapePreceded(escapePreceded) {}
+
+        int key;
+        const bool escapePreceded;
+    };
+
+    virtual bool handleKey(KeyPress keyPress) = 0;
 };
+
+bool operator<(const IKeyHandler::KeyPress &lhs, const IKeyHandler::KeyPress &rhs)
+{
+    if (lhs.escapePreceded && !rhs.escapePreceded)
+        return true;
+    if (!lhs.escapePreceded && rhs.escapePreceded)
+        return false;
+    return lhs.key < rhs.key;
+}
 
 class GotoApplication : public NCursesApplication, public IKeyHandler
 {
 public:
-    bool handleKey(int key)
+    bool handleKey(KeyPress keyPress)
     {
-        switch (key) {
+        switch (keyPress.key) {
         case 'q':
             exit();
             return true;
@@ -420,8 +437,8 @@ public:
 };
 
 typedef function<void()> KeyHandlerFunction;
-typedef map<int, KeyHandlerFunction> KeyMap;
-typedef map<int, KeyHandlerFunction>::iterator KeyMapIterator;
+typedef map<IKeyHandler::KeyPress, KeyHandlerFunction> KeyMap;
+typedef map<IKeyHandler::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
 
 /// Represents the visible lines if there are more menu entries than window lines.
 class ScrollView
@@ -440,21 +457,8 @@ public:
 
     void resetTo(unsigned firstRow) { m_firstRow = firstRow; }
 
-    void moveDown(unsigned times = 1)
-    {
-        while (times--) {
-            ++m_firstRow;
-            assert(m_firstRow != std::numeric_limits<unsigned>::max());
-        }
-    }
-
-    void moveUp(unsigned times = 1)
-    {
-        while (times--) {
-            --m_firstRow;
-            assert(m_firstRow != std::numeric_limits<unsigned>::max());
-        }
-    }
+    void moveDown(unsigned times = 1) { while (times--) ++m_firstRow; }
+    void moveUp(unsigned times = 1) { while (times--) --m_firstRow; }
 
 private:
     unsigned m_firstRow;
@@ -526,7 +530,7 @@ protected:
 
 private:
     void printInputSoFar();
-    bool handleKey(int key);
+    bool handleKey(KeyPress keyPress);
 
     /// When true, jump to the first entry if pressing down arrow on last
     /// item and jump to the last entry if pressing up arrow on first item.
@@ -559,29 +563,39 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
     debug() << "FilterMenu: Window size: " << windowColumns << "x" << windowRows;
 
     keypad(m_window, TRUE);
-    m_map[KEY_UP] = bind(&FilterMenu::navigateEntryUp, this);
-    m_map['k'] = bind(&FilterMenu::navigateEntryUp, this);
-    m_map[KEY_DOWN] = bind(&FilterMenu::navigateEntryDown, this);
-    m_map['j'] = bind(&FilterMenu::navigateEntryDown, this);
-    m_map[KEY_NPAGE] = bind(&FilterMenu::navigatePageDown, this);
-    m_map[KEY_PPAGE] = bind(&FilterMenu::navigatePageUp, this);
-    m_map[KEY_HOME] = bind(&FilterMenu::navigateToStart, this);
-    m_map[KEY_END] = bind(&FilterMenu::navigateToEnd, this);
-    m_map[KEY_RETURN] = bind(&FilterMenu::fire, this);
+    m_map[IKeyHandler::KeyPress(KEY_UP)] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyHandler::KeyPress('k', true)] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyHandler::KeyPress(KEY_DOWN)] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyHandler::KeyPress('j', true)] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyHandler::KeyPress(KEY_NPAGE)] = bind(&FilterMenu::navigatePageDown, this);
+    m_map[IKeyHandler::KeyPress(KEY_PPAGE)] = bind(&FilterMenu::navigatePageUp, this);
+    m_map[IKeyHandler::KeyPress(KEY_HOME)] = bind(&FilterMenu::navigateToStart, this);
+    m_map[IKeyHandler::KeyPress(KEY_END)] = bind(&FilterMenu::navigateToEnd, this);
+    m_map[IKeyHandler::KeyPress(KEY_RETURN)] = bind(&FilterMenu::fire, this);
 
     for (int i = '0'; i <= '9'; ++i)
-        m_map[i] = bind(&FilterMenu::navigateByDigit, this);
+        m_map[IKeyHandler::KeyPress(i, true)] = bind(&FilterMenu::navigateByDigit, this);
 }
 
 int FilterMenu::exec()
 {
+    bool isEscapePreceded = false;
     while (! m_chosenItem) {
         updateMenu();
         updateStatusBar();
         m_key = wgetch(m_window);
-        debug() << "Key:" << m_key;
-        if (! handleKey(m_key) && m_parentKeyHandler)
-            m_parentKeyHandler->handleKey(m_key);
+        if (m_key == KEY_ESC) {
+            isEscapePreceded = true;
+            continue;
+        }
+
+        const IKeyHandler::KeyPress keyPress(m_key, isEscapePreceded);
+        if (isEscapePreceded)
+            isEscapePreceded = false;
+
+        debug() << "Key:" << keyPress.key << "escapePreded:" << keyPress.escapePreceded;
+        if (! handleKey(keyPress) && m_parentKeyHandler)
+            m_parentKeyHandler->handleKey(keyPress);
     }
 
     return ItemChosen;
@@ -807,9 +821,9 @@ void FilterMenu::printInputSoFar()
     // wclear(m_menu_win); // This one flickers with urxvt.
 }
 
-bool FilterMenu::handleKey(int key)
+bool FilterMenu::handleKey(KeyPress keyPress)
 {
-    KeyMapIterator it = m_map.find(key);
+    KeyMapIterator it = m_map.find(keyPress);
     if (it == m_map.end())
         return false;
 
@@ -835,7 +849,7 @@ BookmarkMenu::BookmarkMenu(const MenuItems menuItems, IKeyHandler *parentKeyHand
     : FilterMenu(menuItems, parentKeyHandler)
 {
     readBookmarksFromFile();
-    m_map['e'] = bind(&BookmarkMenu::openEditor, this);
+    m_map[IKeyHandler::KeyPress('e', true)] = bind(&BookmarkMenu::openEditor, this);
 }
 
 void BookmarkMenu::openEditor()
