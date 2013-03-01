@@ -315,18 +315,22 @@ bool operator<(const IKeyHandler::KeyPress &lhs, const IKeyHandler::KeyPress &rh
     return lhs.key < rhs.key;
 }
 
+bool operator==(const IKeyHandler::KeyPress &lhs, const IKeyHandler::KeyPress &rhs)
+{
+    return lhs.key == rhs.key && lhs.escapePreceded == rhs.escapePreceded;
+}
+
 class GotoApplication : public NCursesApplication, public IKeyHandler
 {
 public:
     bool handleKey(KeyPress keyPress)
     {
-        switch (keyPress.key) {
-        case 'q':
+        // Quit with the same shortcut as invoked
+        if (keyPress == KeyPress('`', true)) {
             exit();
             return true;
-        default:
-            return false;
         }
+        return false;
     }
 };
 
@@ -522,7 +526,12 @@ public:
     void navigateToStart();
     void navigateToEnd();
     void navigateByDigit();
+
     void fire();
+
+    void appendToFilter();
+    void chopFromFilter();
+    void clearFilter();
 
 protected:
     KeyMap m_map;
@@ -564,17 +573,33 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
 
     keypad(m_window, TRUE);
     m_map[IKeyHandler::KeyPress(KEY_UP)] = bind(&FilterMenu::navigateEntryUp, this);
-    m_map[IKeyHandler::KeyPress('k', true)] = bind(&FilterMenu::navigateEntryUp, this);
     m_map[IKeyHandler::KeyPress(KEY_DOWN)] = bind(&FilterMenu::navigateEntryDown, this);
-    m_map[IKeyHandler::KeyPress('j', true)] = bind(&FilterMenu::navigateEntryDown, this);
     m_map[IKeyHandler::KeyPress(KEY_NPAGE)] = bind(&FilterMenu::navigatePageDown, this);
     m_map[IKeyHandler::KeyPress(KEY_PPAGE)] = bind(&FilterMenu::navigatePageUp, this);
     m_map[IKeyHandler::KeyPress(KEY_HOME)] = bind(&FilterMenu::navigateToStart, this);
     m_map[IKeyHandler::KeyPress(KEY_END)] = bind(&FilterMenu::navigateToEnd, this);
     m_map[IKeyHandler::KeyPress(KEY_RETURN)] = bind(&FilterMenu::fire, this);
 
+    // Synonyms
+    m_map[IKeyHandler::KeyPress('k', true)] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyHandler::KeyPress('j', true)] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyHandler::KeyPress('p', true)] = bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyHandler::KeyPress('n', true)] = bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyHandler::KeyPress('b', true)] = bind(&FilterMenu::navigatePageUp, this);
+    m_map[IKeyHandler::KeyPress('f', true)] = bind(&FilterMenu::navigatePageDown, this);
+
+    // Access top entries by pressing Alt-Digit
     for (int i = '0'; i <= '9'; ++i)
         m_map[IKeyHandler::KeyPress(i, true)] = bind(&FilterMenu::navigateByDigit, this);
+
+    // All entered printable characters are added to the filter
+    for (int i = 32; i < 256; ++i) {
+        if (isprint(i))
+            m_map[IKeyHandler::KeyPress(i)] = bind(&FilterMenu::appendToFilter, this);
+    }
+    m_map[IKeyHandler::KeyPress(KEY_BACKSPACE)] = bind(&FilterMenu::chopFromFilter, this);
+    // Alt+C is intercepted...; r for reset
+    m_map[IKeyHandler::KeyPress('r', true)] = bind(&FilterMenu::clearFilter, this);
 }
 
 int FilterMenu::exec()
@@ -692,7 +717,10 @@ void FilterMenu::updateStatusBar()
 
     BookmarkItemVisualHints hints(selectedItem);
 
-    m_statusBar.setText(hints.hint, hints.attributes, hints.color);
+    string text = hints.hint;
+    if (! m_filterInput.empty())
+        text = " Filter: " + m_filterInput + " | " + text;
+    m_statusBar.setText(text, hints.attributes, hints.color);
     m_statusBar.update();
 }
 
@@ -739,6 +767,25 @@ void FilterMenu::navigateByDigit()
 
         ++digitCounter;
     }
+}
+
+void FilterMenu::appendToFilter()
+{
+    m_filterInput.push_back(static_cast<char>(m_key));
+    debug() << "Filter Input is now:" << m_filterInput;
+}
+
+void FilterMenu::chopFromFilter()
+{
+    if (m_filterInput.size())
+        m_filterInput.resize(m_filterInput.size() - 1);
+    debug() << "Filter Input is now:" << m_filterInput;
+}
+
+void FilterMenu::clearFilter()
+{
+    m_filterInput.clear();
+    debug() << "Filter Input is now:" << m_filterInput;
 }
 
 void FilterMenu::navigateEntryUp()
