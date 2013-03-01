@@ -99,7 +99,7 @@ static const char ResultFile[] = ".goto.result";
 
 // --- Debug & Assert -----------------------------------------------------------------------------
 
-#define DEBUG_OUTPUT 0
+#define DEBUG_OUTPUT 1
 
 /// Ncurses apps cannot just print to stdout/stderr, so print to a file
 class DebugOutput
@@ -375,6 +375,10 @@ public:
                     else
                         attributes |= A_BOLD;
                 } else {
+                    if (fileInfo.isExecutable && NCursesApplication::supportsColors())
+                        color = NCursesApplication::ColorGreen;
+                    // TODO: Add a proper hint once we can nicely execute command lines
+                    // in the outer shell function handler.
                     hint = " TODO: Proper hint ";
                 }
             } else {
@@ -657,15 +661,12 @@ void FilterMenu::updateMenu()
         mvwprintw(m_window, y, x, "%2s %s ", digitAccessorString.c_str(),
                   paddedDisplayText.c_str());
 
-        if (NCursesApplication::supportsColors()) {
-            if (! isCurrentItem)
-                NCursesApplication::useColor(m_window, hints.color);
-        } else {
-            attributes |= hints.attributes;
-            wattron(m_window, attributes);
-        }
+        if (! isCurrentItem && NCursesApplication::supportsColors())
+            NCursesApplication::useColor(m_window, hints.color);
+        attributes |= hints.attributes;
+        wattron(m_window, attributes);
 
-        mvwprintw(m_window, y, x + 3 + firstColumnWidth + 1, "%s ",
+        mvwprintw(m_window, y, x + 3 + firstColumnWidth + 1, "%s",
                   item->pathDisplayed().c_str());
 
         wattroff(m_window, attributes);
