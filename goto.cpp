@@ -923,7 +923,7 @@ static void writeFile(const string filePath, const string fileContents)
 
 // --- Main --------------------------------------------------------------------------------------
 
-int main()
+int main(int argc, char *argv[])
 {
     GotoApplication app;
 
@@ -935,27 +935,38 @@ int main()
     PathHandlerHint handlerHint(item->path());
     assert(handlerHint.hint != PathHandlerHint::NoHandlerHint);
 
-    // TODO: Make this portable
-    string command;
-    switch (handlerHint.hint) {
-    case PathHandlerHint::ChangeToDirectory:
-        command = "cd \"" + item->path() + '"';
-        break;
-    case PathHandlerHint::ExecuteApplication:
-        command = '"' + item->path() + '"';
-        break;
-    case PathHandlerHint::OpenWithDefaultApplication:
-        command = "xdg-open \"" + item->path() + '"';
-        break;
-    default:
-        command = "Ops, could not determine command to handle path \"" + item->path() + "\".";
+    // Check format for resulting file
+    enum ResultFileFormat { WriteInDefaultFormat, WriteInFutureFormat } resultFileFormat;
+    resultFileFormat = WriteInDefaultFormat;
+    if (argc == 2 && string("--future-format") == argv[1])
+        resultFileFormat = WriteInFutureFormat;
+
+    string fileContents;
+    if (resultFileFormat == WriteInDefaultFormat) {
+        fileContents = item->path();
+    } else {
+        // TODO: Make this portable
+        switch (handlerHint.hint) {
+        case PathHandlerHint::ChangeToDirectory:
+            fileContents = "cd \"" + item->path() + '"';
+            break;
+        case PathHandlerHint::ExecuteApplication:
+            fileContents = '"' + item->path() + '"';
+            break;
+        case PathHandlerHint::OpenWithDefaultApplication:
+            fileContents = "xdg-open \"" + item->path() + '"';
+            break;
+        default:
+            fileContents = "Ops, could not determine command to handle path \""
+                + item->path() + "\".";
+        }
     }
 
     // No result file is written if the user aborts by e.g. Ctrl-C since we
     // never will get to this point.  This is OK since the shell function
     // handles this case.
     const string filePath = getEnvironmentVariableOrDie("HOME") + "/" + ResultFile;
-    writeFile(filePath, command);
+    writeFile(filePath, fileContents);
 
     return EXIT_SUCCESS;
 }

@@ -35,7 +35,7 @@ Setup instructions
 		# Convenience, bind to() to Alt+`
 		# This is zsh specific. Adapt to your shell.
 		# ^q: Evaluate the next stuff isolated from so far entered text.
-		bindkey -s '`' '^qto\n' 
+		bindkey -s '\e`' '^qto\n'
 
 Run instructions
 ----------------
