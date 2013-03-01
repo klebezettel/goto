@@ -87,7 +87,6 @@ class GotoApplication : public NCursesApplication, public IKeyHandler
 public:
     bool handleKey(KeyPress keyPress)
     {
-        // Quit with the same shortcut as invoked
         if (keyPress == KeyPress('`', true) || keyPress == KeyPress(KEY_CTRL_C)
                 || keyPress == KeyPress(KEY_CTRL_D)) {
             exit();
