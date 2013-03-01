@@ -63,6 +63,8 @@
 ///  TEST: Call with no file (--> welcome screen)
 ///  TEST: Call with malformed line
 ///
+///  TODO: When crashing, try to shutdown ncurses properly. Otherwise artifacts will be produced.
+///
 ///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
 ///      --> showing as tabs?
 
@@ -89,6 +91,8 @@
 
 using namespace std;
 
+static const int KEY_CTRL_C = 3;
+static const int KEY_CTRL_D = 4;
 static const int KEY_ESC = 27;
 static const int KEY_RETURN = 10;
 static const char BookmarkFile[] = ".goto.bookmarks";
@@ -207,6 +211,7 @@ static inline string &trim(std::string &s) {
 
 // --- Application classes ------------------------------------------------------------------------
 
+// TODO: Extract some methods to "NCursesUtils"
 class NCursesApplication
 {
 public:
@@ -278,6 +283,21 @@ public:
         ::exit(exitCode);
     }
 
+    static void maybeChop(const WINDOW *window, int startPosition, string &text)
+    {
+        int windowColumns, windowRows;
+        getmaxyx(window, windowRows, windowColumns);
+        (void) windowRows; // Use the unused.
+
+        if (startPosition < windowColumns) {
+            const unsigned charsToLeave = windowColumns - startPosition;
+            if (text.size() > charsToLeave)
+                text.erase(text.begin() + charsToLeave, text.end());
+        } else {
+            text.clear();
+        }
+    }
+
 private:
     // Prefer to use destructor, not this one.
     static void shutdownNCurses() { endwin(); }
@@ -326,7 +346,8 @@ public:
     bool handleKey(KeyPress keyPress)
     {
         // Quit with the same shortcut as invoked
-        if (keyPress == KeyPress('`', true)) {
+        if (keyPress == KeyPress('`', true) || keyPress == KeyPress(KEY_CTRL_C)
+                || keyPress == KeyPress(KEY_CTRL_D)) {
             exit();
             return true;
         }
@@ -440,7 +461,7 @@ public:
     } hint;
 };
 
-typedef function<void()> KeyHandlerFunction;
+typedef function<bool()> KeyHandlerFunction;
 typedef map<IKeyHandler::KeyPress, KeyHandlerFunction> KeyMap;
 typedef map<IKeyHandler::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
 
@@ -519,27 +540,29 @@ public:
     void updateMenu();
     void updateStatusBar();
 
-    void navigateEntryUp();
-    void navigateEntryDown();
-    void navigatePageUp();
-    void navigatePageDown();
-    void navigateToStart();
-    void navigateToEnd();
-    void navigateByDigit();
+    bool navigateEntryUp();
+    bool navigateEntryDown();
+    bool navigatePageUp();
+    bool navigatePageDown();
+    bool navigateToStart();
+    bool navigateToEnd();
+    bool navigateByDigit();
 
-    void fire();
+    bool fire();
 
-    void appendToFilter();
-    void chopFromFilter();
-    void clearFilter();
+    bool appendToFilter();
+    bool chopFromFilter();
+    bool clearFilter();
 
 protected:
     KeyMap m_map;
-    MenuItems m_menuItems;
+    MenuItems m_allMenuItems;
+    MenuItems m_menuItems; // Currently filtered menu items
 
 private:
     void printInputSoFar();
     bool handleKey(KeyPress keyPress);
+    void onFilterStringUpdated();
 
     /// When true, jump to the first entry if pressing down arrow on last
     /// item and jump to the last entry if pressing up arrow on first item.
@@ -556,7 +579,8 @@ private:
 };
 
 FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
-    : m_menuItems(menuItems)
+    : m_allMenuItems(menuItems)
+    , m_menuItems(m_allMenuItems)
     , m_optionWrapOnEntryNavigation(false)
     , m_key(-1)
     , m_chosenItem(0)
@@ -583,8 +607,6 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
     // Synonyms
     m_map[IKeyHandler::KeyPress('k', true)] = bind(&FilterMenu::navigateEntryUp, this);
     m_map[IKeyHandler::KeyPress('j', true)] = bind(&FilterMenu::navigateEntryDown, this);
-    m_map[IKeyHandler::KeyPress('p', true)] = bind(&FilterMenu::navigateEntryUp, this);
-    m_map[IKeyHandler::KeyPress('n', true)] = bind(&FilterMenu::navigateEntryDown, this);
     m_map[IKeyHandler::KeyPress('b', true)] = bind(&FilterMenu::navigatePageUp, this);
     m_map[IKeyHandler::KeyPress('f', true)] = bind(&FilterMenu::navigatePageDown, this);
 
@@ -598,8 +620,8 @@ FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
             m_map[IKeyHandler::KeyPress(i)] = bind(&FilterMenu::appendToFilter, this);
     }
     m_map[IKeyHandler::KeyPress(KEY_BACKSPACE)] = bind(&FilterMenu::chopFromFilter, this);
-    // Alt+C is intercepted...; r for reset
-    m_map[IKeyHandler::KeyPress('r', true)] = bind(&FilterMenu::clearFilter, this);
+    m_map[IKeyHandler::KeyPress(KEY_CTRL_C)] = bind(&FilterMenu::clearFilter, this);
+    m_map[IKeyHandler::KeyPress(KEY_CTRL_D)] = bind(&FilterMenu::clearFilter, this);
 }
 
 int FilterMenu::exec()
@@ -639,13 +661,17 @@ void FilterMenu::reset()
     // the menu is printed in its new dimensions. But the
     // last line is left on the screen. Therefore, clear the
     // window completely instead of doing just a refresh.
-    // The refresh will be triggered anyway at printMenu().
+    // The refresh will be triggered anyway at updateMenu().
     wclear(m_window);
     m_statusBar.update();
 }
 
 void FilterMenu::updateMenu()
 {
+    // Clear window
+    // wclear() flickers with urxvt. werase() works fine.
+    werase(m_window);
+
     if (m_menuItems.empty())
         return;
 
@@ -653,8 +679,9 @@ void FilterMenu::updateMenu()
     int y = 0;
 
     // Get width of first column
+    // Use m_allMenuItems to determine the width, otherwise the column will be adapted on filtering.
     unsigned firstColumnWidth = 0;
-    for (auto v : m_menuItems) {
+    for (auto v : m_allMenuItems) {
         unsigned width = v->identifier().size();
         if (width > firstColumnWidth)
             firstColumnWidth = width;
@@ -676,9 +703,7 @@ void FilterMenu::updateMenu()
         const MenuItemPointer item = m_menuItems.at(i);
         const bool isCurrentItem = m_selectedRow == i;
 
-        stringstream ss;
-        ss << left << setw(firstColumnWidth) << item->identifier();
-        const string paddedDisplayText = ss.str();
+
         string digitAccessorString;
         if (digitAccessor <= 9 && ! item->isEmpty())
             digitAccessorString = to_string(digitAccessor++);
@@ -692,56 +717,83 @@ void FilterMenu::updateMenu()
         wattron(m_window, attributes);
 
         // Clear line
+        // With these extra spaces A_REVERSE will highlight the full line
         mvwhline(m_window, y, x, NCURSES_ACS(' '), 1000); // TODO: Is it OK to use NCURSES_ACS?
 
+        // Construct line
+        stringstream ss;
+        ss << right << setw(2) << digitAccessorString << ' '
+           << left << setw(firstColumnWidth) << item->identifier() << ' ';
+        const string outDigitAccessorAndIdentifier = ss.str();
+
         // Write line
-        mvwprintw(m_window, y, x, "%2s %s ", digitAccessorString.c_str(),
-                  paddedDisplayText.c_str());
+        mvwprintw(m_window, y, x, "%s", outDigitAccessorAndIdentifier.c_str());
 
         if (! isCurrentItem && NCursesApplication::supportsColors())
             NCursesApplication::useColor(m_window, hints.color);
         attributes |= hints.attributes;
         wattron(m_window, attributes);
 
-        mvwprintw(m_window, y, x + 3 + firstColumnWidth + 1, "%s",
-                  item->pathDisplayed().c_str());
+        string outPath = item->pathDisplayed();
+        const int startPosition = x + 3  + firstColumnWidth + 1;
+        NCursesApplication::maybeChop(m_window, startPosition, outPath);
+        mvwprintw(m_window, y, startPosition, "%s", outPath.c_str());
 
         wattroff(m_window, attributes);
     }
+
+    wrefresh(m_window);
 }
 
 void FilterMenu::updateStatusBar()
 {
-    assert(m_selectedRow < m_menuItems.size());
-    MenuItemPointer selectedItem = m_menuItems.at(m_selectedRow);
+    string text;
+    const bool isFilterActive = ! m_filterInput.empty();
+    if (isFilterActive)
+        text = " Filter: " + m_filterInput + ' ' ;
 
-    BookmarkItemVisualHints hints(selectedItem);
+    int attributes = 0;
+    NCursesApplication::Color color = NCursesApplication::ColorDefault;
+    if (m_selectedRow < m_menuItems.size()) {
+        MenuItemPointer selectedItem = m_menuItems.at(m_selectedRow);
+        BookmarkItemVisualHints hints(selectedItem);
+        attributes |= hints.attributes;
+        color = hints.color;
+        const string textToAppend = (isFilterActive ? "| " : "") + hints.hint;
+        text += textToAppend;
+    }
 
-    string text = hints.hint;
-    if (! m_filterInput.empty())
-        text = " Filter: " + m_filterInput + " | " + text;
-    m_statusBar.setText(text, hints.attributes, hints.color);
+    m_statusBar.setText(text, attributes, color);
     m_statusBar.update();
 }
 
-void FilterMenu::navigateToStart()
+bool FilterMenu::navigateToStart()
 {
     m_selectedRow = 0;
     m_scrollView.resetTo(0);
+    return true;
 }
 
-void FilterMenu::navigateToEnd()
+bool FilterMenu::navigateToEnd()
 {
+    if (m_menuItems.empty())
+        return true;
+
     m_selectedRow = m_menuItems.size() - 1;
 
     if (m_menuItems.size() == 0)
         m_scrollView.resetTo(0);
     else if (m_scrollView.lastRow() < m_selectedRow)
         m_scrollView.resetTo(m_selectedRow - (m_scrollView.rowCount() - 1));
+
+    return true;
 }
 
-void FilterMenu::navigateByDigit()
+bool FilterMenu::navigateByDigit()
 {
+    if (m_menuItems.empty())
+        return true;
+
     const unsigned digit = m_key - '0';
     const unsigned lastRow = m_menuItems.size() - 1;
 
@@ -762,34 +814,49 @@ void FilterMenu::navigateByDigit()
                     : m_selectedRow - (scrollViewRowCount - 1 - countFollowingEntries);
                 m_scrollView.resetTo(newFirstRowOfScrollView);
             }
-            return;
+            return true;
         }
 
         ++digitCounter;
     }
+
+    return true;
 }
 
-void FilterMenu::appendToFilter()
+bool FilterMenu::appendToFilter()
 {
     m_filterInput.push_back(static_cast<char>(m_key));
-    debug() << "Filter Input is now:" << m_filterInput;
+    onFilterStringUpdated();
+    return true;
 }
 
-void FilterMenu::chopFromFilter()
+bool FilterMenu::chopFromFilter()
 {
-    if (m_filterInput.size())
-        m_filterInput.resize(m_filterInput.size() - 1);
-    debug() << "Filter Input is now:" << m_filterInput;
+    if (! m_filterInput.size())
+        return true;
+
+    m_filterInput.resize(m_filterInput.size() - 1);
+    onFilterStringUpdated();
+
+    return true;
 }
 
-void FilterMenu::clearFilter()
+bool FilterMenu::clearFilter()
 {
+    if (m_filterInput.empty())
+        return false; // Let's have the parent handler invoked!
+
     m_filterInput.clear();
-    debug() << "Filter Input is now:" << m_filterInput;
+    onFilterStringUpdated();
+
+    return true;
 }
 
-void FilterMenu::navigateEntryUp()
+bool FilterMenu::navigateEntryUp()
 {
+    if (m_menuItems.empty())
+        return true;
+
     if (m_selectedRow == 0) {
         if (m_optionWrapOnEntryNavigation)
             navigateToEnd();
@@ -802,31 +869,40 @@ void FilterMenu::navigateEntryUp()
         if (nonVisibleItemsBefore && selectedLineWouldBeInvisible)
             m_scrollView.moveUp(originalSelectedRow - m_selectedRow);
     }
+
+    return true;
 }
 
-void FilterMenu::navigateEntryDown()
+bool FilterMenu::navigateEntryDown()
 {
-    if (m_selectedRow == m_menuItems.size() - 1) {
+    const unsigned menuItemsSize = m_menuItems.size();
+    if (menuItemsSize == 0)
+        return true;
+
+    if (m_selectedRow == menuItemsSize - 1) {
         if (m_optionWrapOnEntryNavigation)
             navigateToStart();
     } else {
         const unsigned originalSelectedRow = m_selectedRow;
         while (m_menuItems.at(++m_selectedRow)->isEmpty());
 
-        const bool nonVisibleItemsFollowing = m_scrollView.lastRow() < m_menuItems.size() - 1;
+        const bool nonVisibleItemsFollowing = m_scrollView.lastRow() < menuItemsSize - 1;
         const bool selectedLineWouldBeInvisible = m_selectedRow >= m_scrollView.lastRow() + 1;
         if (nonVisibleItemsFollowing && selectedLineWouldBeInvisible)
             m_scrollView.moveDown(m_selectedRow - originalSelectedRow);
     }
 
-    wrefresh(m_window);
+    return true;
 }
 
-void FilterMenu::navigatePageUp()
+bool FilterMenu::navigatePageUp()
 {
+    if (m_menuItems.empty())
+        return true;
+
     if (m_selectedRow == 0) {
         assert(m_selectedRow == m_scrollView.firstRow())
-        return;
+        return true;
     }
 
     const int newFirstRow = m_scrollView.firstRow() - m_scrollView.rowCount();
@@ -836,13 +912,18 @@ void FilterMenu::navigatePageUp()
     } else {
         navigateToStart();
     }
+
+    return true;
 }
 
-void FilterMenu::navigatePageDown()
+bool FilterMenu::navigatePageDown()
 {
+    if (m_menuItems.empty())
+        return true;
+
     if (m_selectedRow == m_menuItems.size() - 1) {
         assert(m_selectedRow == m_scrollView.lastRow())
-        return;
+        return true;
     }
 
     const unsigned newFirstRow = m_scrollView.lastRow() + 1;
@@ -853,12 +934,26 @@ void FilterMenu::navigatePageDown()
     } else {
         navigateToEnd();
     }
+
+    return true;
 }
 
-void FilterMenu::fire()
+bool FilterMenu::fire()
 {
+    if (m_menuItems.empty())
+        return true;
+
     assert(m_selectedRow <= m_menuItems.size() - 1);
-    m_chosenItem = m_menuItems.at(m_selectedRow);
+    MenuItemPointer item = m_menuItems.at(m_selectedRow);
+
+    if (item->isEmpty())
+        return true;
+    Utils::FileInfo info(item->path());
+    if (! info.exists)
+        return true;
+
+    m_chosenItem = item;
+    return true;
 }
 
 void FilterMenu::printInputSoFar()
@@ -875,8 +970,27 @@ bool FilterMenu::handleKey(KeyPress keyPress)
         return false;
 
     KeyHandlerFunction handler = it->second;
-    (handler)();
-    return true;
+    return (handler)();
+}
+
+void FilterMenu::onFilterStringUpdated()
+{
+    m_selectedRow = 0;
+    m_scrollView.resetTo(0);
+
+    if (m_filterInput.empty()) {
+        m_menuItems = m_allMenuItems;
+        return;
+    }
+
+    m_menuItems.clear();
+    for (unsigned i = 0; i < m_allMenuItems.size(); ++i) {
+        MenuItemPointer item = m_allMenuItems.at(i);
+        const bool identifierMatches = item->identifier().find(m_filterInput) != string::npos;
+        const bool pathMatches = item->pathDisplayed().find(m_filterInput) != string::npos;
+        if (identifierMatches || pathMatches)
+            m_menuItems.push_back(item);
+    }
 }
 
 typedef shared_ptr<BookmarkItem> BookmarkItemPointer;
@@ -885,7 +999,7 @@ class BookmarkMenu : public FilterMenu
 {
 public:
     BookmarkMenu(const MenuItems menuItems = MenuItems(), IKeyHandler *parentKeyHandler = 0);
-    void openEditor();
+    bool openEditor();
 
     BookmarkItemPointer chosenItem();
 private:
@@ -899,7 +1013,7 @@ BookmarkMenu::BookmarkMenu(const MenuItems menuItems, IKeyHandler *parentKeyHand
     m_map[IKeyHandler::KeyPress('e', true)] = bind(&BookmarkMenu::openEditor, this);
 }
 
-void BookmarkMenu::openEditor()
+bool BookmarkMenu::openEditor()
 {
     stringstream command;
     command << "$EDITOR " << "$HOME/" << BookmarkFile;
@@ -907,6 +1021,8 @@ void BookmarkMenu::openEditor()
     NCursesApplication::runExternalCommand(command.str());
     readBookmarksFromFile();
     reset(); // Cursor might be on the last entry and the user might deleted the last entry.
+
+    return true;
 }
 
 BookmarkItemPointer BookmarkMenu::chosenItem()
@@ -927,7 +1043,7 @@ void BookmarkMenu::readBookmarksFromFile()
         NCursesApplication::error("Could not open file \"" + filePath + "\"");
 
     // Parse file
-    m_menuItems.clear();
+    m_allMenuItems.clear();
     string line;
     const char delimiter = ',';
     bool lastLineWasEmpty = false;
@@ -961,13 +1077,14 @@ void BookmarkMenu::readBookmarksFromFile()
         Utils::rtrim(bookmarkName); // Don't trim in the beginning. User might want to indent.
         Utils::trim(bookmarkPath);
 
-        m_menuItems.push_back(BookmarkItemPointer(new BookmarkItem(bookmarkName, bookmarkPath)));
+        m_allMenuItems.push_back(BookmarkItemPointer(new BookmarkItem(bookmarkName, bookmarkPath)));
     }
 
     // Discard only line or last line if it is empty.
-    if (! m_menuItems.empty() && m_menuItems.back()->isEmpty())
-            m_menuItems.pop_back();
+    if (! m_allMenuItems.empty() && m_allMenuItems.back()->isEmpty())
+            m_allMenuItems.pop_back();
 
+    m_menuItems = m_allMenuItems;
     file.close();
 }
 
