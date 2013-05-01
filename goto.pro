@@ -19,9 +19,9 @@ SOURCES += \
     gui-ncurses/bookmarkmenu.cpp \
 	gui-ncurses/ncursesapplication.cpp \
     gui-ncurses/menuitemvisualhints.cpp \
+    core/bookmarkitemsmodel.cpp
 
 HEADERS += \
-	abstractmenuitem.h \
 	utils/debugutils.h\
 	utils/fileutils.h \
     utils/stringutils.h \
@@ -32,6 +32,9 @@ HEADERS += \
     gui-ncurses/bookmarkmenu.h \
 	gui-ncurses/ncursesapplication.h \
     gui-ncurses/menuitemvisualhints.h \
+    core/imodel.h \
+    core/bookmarkitemsmodel.h \
+    imenuitem.h
 
 OTHER_FILES += README.md
 

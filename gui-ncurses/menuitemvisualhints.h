@@ -1,8 +1,9 @@
 #ifndef MENUITEMVISUALHINTS_H
 #define MENUITEMVISUALHINTS_H
 
-#include "abstractmenuitem.h"
 #include "ncursesapplication.h"
+
+#include "core/imenuitem.h"
 
 #include <string>
 

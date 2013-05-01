@@ -68,6 +68,8 @@
 ///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
 ///      --> showing as tabs?
 
+#include "core/bookmarkitemsmodel.h"
+
 #include "gui-ncurses/bookmarkmenu.h"
 #include "gui-ncurses/ikeyhandler.h"
 #include "gui-ncurses/ncursesapplication.h"
@@ -100,13 +102,14 @@ int main(int argc, char *argv[])
 {
     GotoApplication app;
 
-    BookmarkMenu menu(BookmarkFile, MenuItems(), &app);
+    Core::BookmarkItemsModel bookmarkItemsModel(BookmarkFile);
+    BookmarkMenu menu(BookmarkFile, bookmarkItemsModel, &app);
     menu.exec(); // Block until the user decided for an item.
 
-    BookmarkItemPointer item = menu.chosenItem();
+    Core::BookmarkItemPointer item = menu.chosenItem();
     assert(item);
-    BookmarkItem::PathHandlerHint handlerHint(item->path());
-    assert(handlerHint.hint != BookmarkItem::PathHandlerHint::NoHandlerHint);
+    Core::BookmarkItem::PathHandlerHint handlerHint(item->path());
+    assert(handlerHint.hint != Core::BookmarkItem::PathHandlerHint::NoHandlerHint);
 
     // Check format for resulting file
     enum ResultFileFormat { WriteInDefaultFormat, WriteInFutureFormat } resultFileFormat;
@@ -120,13 +123,13 @@ int main(int argc, char *argv[])
     } else {
         // TODO: Make this portable
         switch (handlerHint.hint) {
-        case BookmarkItem::PathHandlerHint::ChangeToDirectory:
+        case Core::BookmarkItem::PathHandlerHint::ChangeToDirectory:
             fileContents = "cd \"" + item->path() + '"';
             break;
-        case BookmarkItem::PathHandlerHint::ExecuteApplication:
+        case Core::BookmarkItem::PathHandlerHint::ExecuteApplication:
             fileContents = '"' + item->path() + '"';
             break;
-        case BookmarkItem::PathHandlerHint::OpenWithDefaultApplication:
+        case Core::BookmarkItem::PathHandlerHint::OpenWithDefaultApplication:
             fileContents = "xdg-open \"" + item->path() + '"';
             break;
         default:

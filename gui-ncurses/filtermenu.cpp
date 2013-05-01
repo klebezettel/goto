@@ -1,5 +1,7 @@
 #include "filtermenu.h"
 
+#include "core/imodel.h"
+
 #include "menuitemvisualhints.h"
 
 #include "utils/debugutils.h"
@@ -14,8 +16,9 @@ using namespace Utils::DebugUtils;
 namespace TUI {
 namespace NCurses {
 
-FilterMenu::FilterMenu(const MenuItems menuItems, IKeyHandler *parentKeyHandler)
-    : m_allMenuItems(menuItems)
+FilterMenu::FilterMenu(Core::IModel &model, IKeyHandler *parentKeyHandler)
+    : m_model(model)
+    , m_allMenuItems(m_model.items(false))
     , m_menuItems(m_allMenuItems)
     , m_optionWrapOnEntryNavigation(false)
     , m_key(-1)

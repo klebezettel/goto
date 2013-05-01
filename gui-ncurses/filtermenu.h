@@ -1,10 +1,12 @@
 #ifndef FILTERMENU_H
 #define FILTERMENU_H
 
-#include "abstractmenuitem.h"
 #include "ikeyhandler.h"
 #include "scrollview.h"
 #include "statusbar.h"
+
+#include "core/imenuitem.h"
+#include "core/imodel.h"
 
 #include <functional>
 #include <map>
@@ -18,7 +20,7 @@ namespace NCurses {
 class FilterMenu : public IKeyHandler
 {
 public:
-    FilterMenu(const MenuItems menuItems = MenuItems(), IKeyHandler *parentKeyHandler = 0);
+    FilterMenu(Core::IModel &model, IKeyHandler *parentKeyHandler = 0);
     ~FilterMenu() { delwin(m_window); }
 
     enum MenuResult { ItemChosen, NoItemChosen };
@@ -49,6 +51,7 @@ protected:
     typedef std::map<IKeyHandler::KeyPress, KeyHandlerFunction> KeyMap;
     typedef std::map<IKeyHandler::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
 
+    Core::IModel &m_model;
     KeyMap m_map;
     MenuItems m_allMenuItems;
     MenuItems m_menuItems; // Currently filtered menu items
