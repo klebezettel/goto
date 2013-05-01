@@ -9,7 +9,7 @@
 
 namespace Core {
 
-BookmarkItem::PathHandlerHint::PathHandlerHint(const std::string &path)
+BookmarkItem::HandlerHint::HandlerHint(const std::string &path)
     : hint(NoHandlerHint)
 {
     assert(!path.empty());

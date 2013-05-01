@@ -84,7 +84,7 @@ using namespace TUI::NCurses;
 static const char BookmarkFile[] = ".goto.bookmarks";
 static const char ResultFile[] = ".goto.result";
 
-class GotoApplication : public NCursesApplication, public IKeyHandler
+class GotoApplication : public NCursesApplication, public IKeyController
 {
 public:
     bool handleKey(KeyPress keyPress)
@@ -108,8 +108,8 @@ int main(int argc, char *argv[])
 
     Core::BookmarkItemPointer item = menu.chosenItem();
     assert(item);
-    Core::BookmarkItem::PathHandlerHint handlerHint(item->path());
-    assert(handlerHint.hint != Core::BookmarkItem::PathHandlerHint::NoHandlerHint);
+    Core::BookmarkItem::HandlerHint handlerHint(item->path());
+    assert(handlerHint.hint != Core::BookmarkItem::HandlerHint::NoHandlerHint);
 
     // Check format for resulting file
     enum ResultFileFormat { WriteInDefaultFormat, WriteInFutureFormat } resultFileFormat;
@@ -123,13 +123,13 @@ int main(int argc, char *argv[])
     } else {
         // TODO: Make this portable
         switch (handlerHint.hint) {
-        case Core::BookmarkItem::PathHandlerHint::ChangeToDirectory:
+        case Core::BookmarkItem::HandlerHint::ChangeToDirectory:
             fileContents = "cd \"" + item->path() + '"';
             break;
-        case Core::BookmarkItem::PathHandlerHint::ExecuteApplication:
+        case Core::BookmarkItem::HandlerHint::ExecuteApplication:
             fileContents = '"' + item->path() + '"';
             break;
-        case Core::BookmarkItem::PathHandlerHint::OpenWithDefaultApplication:
+        case Core::BookmarkItem::HandlerHint::OpenWithDefaultApplication:
             fileContents = "xdg-open \"" + item->path() + '"';
             break;
         default:

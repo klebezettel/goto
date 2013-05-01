@@ -9,32 +9,32 @@ LIBS += -lncurses
 
 SOURCES += \
 	goto.cpp \
+	core/bookmarkitemsmodel.cpp \
 	utils/debugutils.cpp \
 	utils/fileutils.cpp \
 	utils/stringutils.cpp \
-	gui-ncurses/ikeyhandler.cpp \
+	gui-ncurses/bookmarkmenu.cpp \
 	gui-ncurses/filtermenu.cpp \
-    gui-ncurses/scrollview.cpp \
-    gui-ncurses/statusbar.cpp \
-    gui-ncurses/bookmarkmenu.cpp \
+	gui-ncurses/ikeyhandler.cpp \
+	gui-ncurses/menuitemvisualhints.cpp \
 	gui-ncurses/ncursesapplication.cpp \
-    gui-ncurses/menuitemvisualhints.cpp \
-    core/bookmarkitemsmodel.cpp
+	gui-ncurses/scrollview.cpp \
+	gui-ncurses/statusbar.cpp \
 
 HEADERS += \
+	core/imenuitem.h \
+	core/imodel.h \
+	core/bookmarkitemsmodel.h \
 	utils/debugutils.h\
 	utils/fileutils.h \
     utils/stringutils.h \
-	gui-ncurses/ikeyhandler.h \
+	gui-ncurses/bookmarkmenu.h \
 	gui-ncurses/filtermenu.h \
-    gui-ncurses/scrollview.h \
-    gui-ncurses/statusbar.h \
-    gui-ncurses/bookmarkmenu.h \
+	gui-ncurses/ikeyhandler.h \
+	gui-ncurses/menuitemvisualhints.h \
 	gui-ncurses/ncursesapplication.h \
-    gui-ncurses/menuitemvisualhints.h \
-    core/imodel.h \
-    core/bookmarkitemsmodel.h \
-    imenuitem.h
+	gui-ncurses/scrollview.h \
+	gui-ncurses/statusbar.h \
 
 OTHER_FILES += README.md
 

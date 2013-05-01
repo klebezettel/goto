@@ -1,14 +1,14 @@
-#ifndef ABSTRACTMENUITEM_H
-#define ABSTRACTMENUITEM_H
+#ifndef IMENUITEM_H
+#define IMENUITEM_H
 
 #include <memory>
 #include <string>
 #include <vector>
 
-class AbstractMenuItem
+class IMenuItem
 {
 public:
-    virtual ~AbstractMenuItem() {}
+    virtual ~IMenuItem() {}
 
     virtual std::string identifier() const = 0;
     virtual std::string path() const = 0;
@@ -17,7 +17,7 @@ public:
     virtual bool isEmpty() { return identifier().empty() && path().empty(); }
 };
 
-typedef std::shared_ptr<AbstractMenuItem> MenuItemPointer;
+typedef std::shared_ptr<IMenuItem> MenuItemPointer;
 typedef std::vector<MenuItemPointer> MenuItems;
 
-#endif // ABSTRACTMENUITEM_H
+#endif // IMENUITEM_H

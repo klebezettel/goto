@@ -8,12 +8,12 @@
 
 namespace Core {
 
-class BookmarkItem : public AbstractMenuItem {
+class BookmarkItem : public IMenuItem {
 public:
-    class PathHandlerHint
+    class HandlerHint
     {
     public:
-        PathHandlerHint(const std::string &path);
+        HandlerHint(const std::string &path);
 
         enum Hint {
             NoHandlerHint,

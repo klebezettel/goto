@@ -16,11 +16,11 @@ namespace NCurses {
 
 BookmarkMenu::BookmarkMenu(const std::string &bookmarkFilePath,
                            Core::BookmarkItemsModel &model,
-                           IKeyHandler *parentKeyHandler)
+                           IKeyController *parentKeyHandler)
     : FilterMenu(model, parentKeyHandler)
     , m_bookmarkFilePath(bookmarkFilePath)
 {
-    m_map[IKeyHandler::KeyPress('e', true)] = std::bind(&BookmarkMenu::openEditor, this);
+    m_map[IKeyController::KeyPress('e', true)] = std::bind(&BookmarkMenu::openEditor, this);
 }
 
 bool BookmarkMenu::openEditor()

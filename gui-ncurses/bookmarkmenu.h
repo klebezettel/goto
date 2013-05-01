@@ -16,7 +16,7 @@ class BookmarkMenu : public FilterMenu
 {
 public:
     BookmarkMenu(const std::string &bookmarkFilePath, Core::BookmarkItemsModel &model,
-                 IKeyHandler *parentKeyHandler = 0);
+                 IKeyController *parentKeyHandler = 0);
     bool openEditor();
 
     Core::BookmarkItemPointer chosenItem();

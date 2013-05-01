@@ -16,7 +16,7 @@ using namespace Utils::DebugUtils;
 namespace TUI {
 namespace NCurses {
 
-FilterMenu::FilterMenu(Core::IModel &model, IKeyHandler *parentKeyHandler)
+FilterMenu::FilterMenu(Core::IModel &model, IKeyController *parentKeyHandler)
     : m_model(model)
     , m_allMenuItems(m_model.items(false))
     , m_menuItems(m_allMenuItems)
@@ -35,32 +35,32 @@ FilterMenu::FilterMenu(Core::IModel &model, IKeyHandler *parentKeyHandler)
     debug() << "FilterMenu: Window size: " << windowColumns << "x" << windowRows;
 
     keypad(m_window, TRUE);
-    m_map[IKeyHandler::KeyPress(KEY_UP)] = std::bind(&FilterMenu::navigateEntryUp, this);
-    m_map[IKeyHandler::KeyPress(KEY_DOWN)] = std::bind(&FilterMenu::navigateEntryDown, this);
-    m_map[IKeyHandler::KeyPress(KEY_NPAGE)] = std::bind(&FilterMenu::navigatePageDown, this);
-    m_map[IKeyHandler::KeyPress(KEY_PPAGE)] = std::bind(&FilterMenu::navigatePageUp, this);
-    m_map[IKeyHandler::KeyPress(KEY_HOME)] = std::bind(&FilterMenu::navigateToStart, this);
-    m_map[IKeyHandler::KeyPress(KEY_END)] = std::bind(&FilterMenu::navigateToEnd, this);
-    m_map[IKeyHandler::KeyPress(KEY_RETURN)] = std::bind(&FilterMenu::fire, this);
+    m_map[IKeyController::KeyPress(KEY_UP)] = std::bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyController::KeyPress(KEY_DOWN)] = std::bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyController::KeyPress(KEY_NPAGE)] = std::bind(&FilterMenu::navigatePageDown, this);
+    m_map[IKeyController::KeyPress(KEY_PPAGE)] = std::bind(&FilterMenu::navigatePageUp, this);
+    m_map[IKeyController::KeyPress(KEY_HOME)] = std::bind(&FilterMenu::navigateToStart, this);
+    m_map[IKeyController::KeyPress(KEY_END)] = std::bind(&FilterMenu::navigateToEnd, this);
+    m_map[IKeyController::KeyPress(KEY_RETURN)] = std::bind(&FilterMenu::fire, this);
 
     // Synonyms
-    m_map[IKeyHandler::KeyPress('k', true)] = std::bind(&FilterMenu::navigateEntryUp, this);
-    m_map[IKeyHandler::KeyPress('j', true)] = std::bind(&FilterMenu::navigateEntryDown, this);
-    m_map[IKeyHandler::KeyPress('b', true)] = std::bind(&FilterMenu::navigatePageUp, this);
-    m_map[IKeyHandler::KeyPress('f', true)] = std::bind(&FilterMenu::navigatePageDown, this);
+    m_map[IKeyController::KeyPress('k', true)] = std::bind(&FilterMenu::navigateEntryUp, this);
+    m_map[IKeyController::KeyPress('j', true)] = std::bind(&FilterMenu::navigateEntryDown, this);
+    m_map[IKeyController::KeyPress('b', true)] = std::bind(&FilterMenu::navigatePageUp, this);
+    m_map[IKeyController::KeyPress('f', true)] = std::bind(&FilterMenu::navigatePageDown, this);
 
     // Access top entries by pressing Alt-Digit
     for (int i = '0'; i <= '9'; ++i)
-        m_map[IKeyHandler::KeyPress(i, true)] = std::bind(&FilterMenu::navigateByDigit, this);
+        m_map[IKeyController::KeyPress(i, true)] = std::bind(&FilterMenu::navigateByDigit, this);
 
     // All entered printable characters are added to the filter
     for (int i = 32; i < 256; ++i) {
         if (isprint(i))
-            m_map[IKeyHandler::KeyPress(i)] = std::bind(&FilterMenu::appendToFilter, this);
+            m_map[IKeyController::KeyPress(i)] = std::bind(&FilterMenu::appendToFilter, this);
     }
-    m_map[IKeyHandler::KeyPress(KEY_BACKSPACE)] = std::bind(&FilterMenu::chopFromFilter, this);
-    m_map[IKeyHandler::KeyPress(KEY_CTRL_C)] = std::bind(&FilterMenu::clearFilter, this);
-    m_map[IKeyHandler::KeyPress(KEY_CTRL_D)] = std::bind(&FilterMenu::clearFilter, this);
+    m_map[IKeyController::KeyPress(KEY_BACKSPACE)] = std::bind(&FilterMenu::chopFromFilter, this);
+    m_map[IKeyController::KeyPress(KEY_CTRL_C)] = std::bind(&FilterMenu::clearFilter, this);
+    m_map[IKeyController::KeyPress(KEY_CTRL_D)] = std::bind(&FilterMenu::clearFilter, this);
 }
 
 int FilterMenu::exec()
@@ -75,7 +75,7 @@ int FilterMenu::exec()
             continue;
         }
 
-        const IKeyHandler::KeyPress keyPress(m_key, isEscapePreceded);
+        const IKeyController::KeyPress keyPress(m_key, isEscapePreceded);
         if (isEscapePreceded)
             isEscapePreceded = false;
 

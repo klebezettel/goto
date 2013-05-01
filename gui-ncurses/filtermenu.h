@@ -17,10 +17,10 @@
 namespace TUI {
 namespace NCurses {
 
-class FilterMenu : public IKeyHandler
+class FilterMenu : public IKeyController
 {
 public:
-    FilterMenu(Core::IModel &model, IKeyHandler *parentKeyHandler = 0);
+    FilterMenu(Core::IModel &model, IKeyController *parentKeyHandler = 0);
     ~FilterMenu() { delwin(m_window); }
 
     enum MenuResult { ItemChosen, NoItemChosen };
@@ -48,8 +48,8 @@ public:
 
 protected:
     typedef std::function<bool()> KeyHandlerFunction;
-    typedef std::map<IKeyHandler::KeyPress, KeyHandlerFunction> KeyMap;
-    typedef std::map<IKeyHandler::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
+    typedef std::map<IKeyController::KeyPress, KeyHandlerFunction> KeyMap;
+    typedef std::map<IKeyController::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
 
     Core::IModel &m_model;
     KeyMap m_map;
@@ -68,7 +68,7 @@ private:
     int m_key;
     MenuItemPointer m_chosenItem;
     std::string m_filterInput;
-    IKeyHandler *m_parentKeyHandler;
+    IKeyController *m_parentKeyHandler;
     ScrollView m_scrollView;
     unsigned m_selectedRow;
     WINDOW *m_window;

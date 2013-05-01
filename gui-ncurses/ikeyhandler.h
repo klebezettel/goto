@@ -4,7 +4,7 @@
 namespace TUI {
 namespace NCurses {
 
-class IKeyHandler
+class IKeyController
 {
 public:
     struct KeyPress {
@@ -18,8 +18,8 @@ public:
     virtual bool handleKey(KeyPress keyPress) = 0;
 };
 
-bool operator<(const IKeyHandler::KeyPress &lhs, const IKeyHandler::KeyPress &rhs);
-bool operator==(const IKeyHandler::KeyPress &lhs, const IKeyHandler::KeyPress &rhs);
+bool operator<(const IKeyController::KeyPress &lhs, const IKeyController::KeyPress &rhs);
+bool operator==(const IKeyController::KeyPress &lhs, const IKeyController::KeyPress &rhs);
 
 } // namespace NCurses
 } // namespace TUI
