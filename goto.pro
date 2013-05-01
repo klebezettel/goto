@@ -6,7 +6,33 @@ CONFIG -= qt
 QMAKE_CXXFLAGS += -pedantic -std=c++11
 
 LIBS += -lncurses
-SOURCES += goto.cpp
+
+SOURCES += \
+	goto.cpp \
+	utils/debugutils.cpp \
+	utils/fileutils.cpp \
+	utils/stringutils.cpp \
+	gui-ncurses/ikeyhandler.cpp \
+	gui-ncurses/filtermenu.cpp \
+    gui-ncurses/scrollview.cpp \
+    gui-ncurses/statusbar.cpp \
+    gui-ncurses/bookmarkmenu.cpp \
+	gui-ncurses/ncursesapplication.cpp \
+    gui-ncurses/menuitemvisualhints.cpp \
+
+HEADERS += \
+	abstractmenuitem.h \
+	utils/debugutils.h\
+	utils/fileutils.h \
+    utils/stringutils.h \
+	gui-ncurses/ikeyhandler.h \
+	gui-ncurses/filtermenu.h \
+    gui-ncurses/scrollview.h \
+    gui-ncurses/statusbar.h \
+    gui-ncurses/bookmarkmenu.h \
+	gui-ncurses/ncursesapplication.h \
+    gui-ncurses/menuitemvisualhints.h \
+
 OTHER_FILES += README.md
 
 unix {
