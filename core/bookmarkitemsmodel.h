@@ -1,5 +1,5 @@
-#ifndef BOOKMARKSMODEL_H
-#define BOOKMARKSMODEL_H
+#ifndef BOOKMARKITEMSMODEL_H
+#define BOOKMARKITEMSMODEL_H
 
 #include "imenuitem.h"
 #include "imodel.h"
@@ -51,4 +51,4 @@ private:
 
 } // namespace Core
 
-#endif // BOOKMARKSMODEL_H
+#endif // BOOKMARKITEMSMODEL_H
