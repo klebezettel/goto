@@ -68,35 +68,23 @@
 ///  IDEA: multiple 'book mark files' - select on start which to use or at run time which to use
 ///      --> showing as tabs?
 
-#include "core/bookmarkitemsmodel.h"
+#include "gotoapplication.h"
 
-#include "gui-ncurses/bookmarkmenu.h"
-#include "gui-ncurses/ikeyhandler.h"
-#include "gui-ncurses/ncursesapplication.h"
+#include <core/bookmarkitemsmodel.h>
 
-#include "utils/debugutils.h"
-#include "utils/fileutils.h"
-#include "utils/stringutils.h"
+#include <gui-ncurses/bookmarkmenu.h>
+#include <gui-ncurses/ikeyhandler.h>
+#include <gui-ncurses/ncursesapplication.h>
+
+#include <utils/debugutils.h>
+#include <utils/fileutils.h>
+#include <utils/stringutils.h>
 
 using namespace std;
 using namespace TUI::NCurses;
 
 static const char BookmarkFile[] = ".goto.bookmarks";
 static const char ResultFile[] = ".goto.result";
-
-class GotoApplication : public NCursesApplication, public IKeyController
-{
-public:
-    bool handleKey(KeyPress keyPress)
-    {
-        if (keyPress == KeyPress('`', true) || keyPress == KeyPress(KEY_CTRL_C)
-                || keyPress == KeyPress(KEY_CTRL_D)) {
-            exit();
-            return true;
-        }
-        return false;
-    }
-};
 
 int main(int argc, char *argv[])
 {
