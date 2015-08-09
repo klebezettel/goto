@@ -2,6 +2,20 @@
 
 #include <iostream>
 
+namespace {
+
+void shutdownNCurses()
+{
+    endwin();
+}
+
+void resumeNCurses()
+{
+    refresh();
+}
+
+} // anonymous
+
 namespace TUI {
 namespace NCurses {
 
@@ -84,16 +98,6 @@ void NCursesApplication::maybeChop(const WINDOW *window, int startPosition, std:
     } else {
         text.clear();
     }
-}
-
-void NCursesApplication::shutdownNCurses()
-{
-    endwin();
-}
-
-void NCursesApplication::resumeNCurses()
-{
-    refresh();
 }
 
 } // namespace NCurses

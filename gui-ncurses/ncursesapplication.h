@@ -22,8 +22,14 @@ public:
     ~NCursesApplication();
 
     enum Color {
-        ColorDefault, ColorRed, ColorGreen, ColorYellow,
-        ColorBlue, ColorMagenta, ColorCyan, ColorWhite
+        ColorDefault,
+        ColorRed,
+        ColorGreen,
+        ColorYellow,
+        ColorBlue,
+        ColorMagenta,
+        ColorCyan,
+        ColorWhite
     };
 
     static bool supportsColors();
@@ -35,11 +41,6 @@ public:
     static void exit(int exitCode = EXIT_SUCCESS);
 
     static void maybeChop(const WINDOW *window, int startPosition, std::string &text);
-
-private:
-    // Prefer to use destructor, not this one.
-    static void shutdownNCurses();
-    static void resumeNCurses();
 };
 
 } // namespace NCurses
