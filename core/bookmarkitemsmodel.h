@@ -33,7 +33,7 @@ private:
     const std::string m_path;
 };
 
-typedef std::shared_ptr<BookmarkItem> BookmarkItemPointer;
+using BookmarkItemPointer = std::shared_ptr<BookmarkItem>;
 
 class BookmarkItemsModel: public IModel
 {

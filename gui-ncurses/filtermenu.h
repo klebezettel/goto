@@ -47,9 +47,9 @@ public:
     bool clearFilter();
 
 protected:
-    typedef std::function<bool()> KeyHandlerFunction;
-    typedef std::map<IKeyController::KeyPress, KeyHandlerFunction> KeyMap;
-    typedef std::map<IKeyController::KeyPress, KeyHandlerFunction>::iterator KeyMapIterator;
+    using KeyHandlerFunction = std::function<bool()>;
+    using KeyMap = std::map<IKeyController::KeyPress, KeyHandlerFunction>;
+    using KeyMapIterator = std::map<IKeyController::KeyPress, KeyHandlerFunction>::iterator;
 
     Core::IModel &m_model;
     KeyMap m_map;

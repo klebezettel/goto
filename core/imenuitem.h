@@ -17,7 +17,7 @@ public:
     virtual bool isEmpty() { return identifier().empty() && path().empty(); }
 };
 
-typedef std::shared_ptr<IMenuItem> MenuItemPointer;
-typedef std::vector<MenuItemPointer> MenuItems;
+using MenuItemPointer = std::shared_ptr<IMenuItem>;
+using MenuItems = std::vector<MenuItemPointer>;
 
 #endif // IMENUITEM_H
