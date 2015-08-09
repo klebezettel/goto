@@ -81,6 +81,7 @@
 #include <utils/stringutils.h>
 
 using namespace std;
+using namespace Core;
 using namespace TUI::NCurses;
 
 static const char BookmarkFile[] = ".goto.bookmarks";
@@ -90,14 +91,14 @@ int main(int argc, char *argv[])
 {
     GotoApplication app;
 
-    Core::BookmarkItemsModel bookmarkItemsModel(BookmarkFile);
+    BookmarkItemsModel bookmarkItemsModel(BookmarkFile);
     BookmarkMenu menu(BookmarkFile, bookmarkItemsModel, &app);
     menu.exec(); // Block until the user decided for an item.
 
-    Core::BookmarkItemPointer item = menu.chosenItem();
+    BookmarkItemPointer item = menu.chosenItem();
     assert(item);
-    Core::BookmarkItem::HandlerHint handlerHint(item->path());
-    assert(handlerHint.hint != Core::BookmarkItem::HandlerHint::NoHandlerHint);
+    BookmarkItem::HandlerHint handlerHint(item->path());
+    assert(handlerHint.hint != BookmarkItem::HandlerHint::NoHandlerHint);
 
     // Check format for resulting file
     enum ResultFileFormat { WriteInDefaultFormat, WriteInFutureFormat } resultFileFormat;
@@ -111,13 +112,13 @@ int main(int argc, char *argv[])
     } else {
         // TODO: Make this portable
         switch (handlerHint.hint) {
-        case Core::BookmarkItem::HandlerHint::ChangeToDirectory:
+        case BookmarkItem::HandlerHint::ChangeToDirectory:
             fileContents = "cd \"" + item->path() + '"';
             break;
-        case Core::BookmarkItem::HandlerHint::ExecuteApplication:
+        case BookmarkItem::HandlerHint::ExecuteApplication:
             fileContents = '"' + item->path() + '"';
             break;
-        case Core::BookmarkItem::HandlerHint::OpenWithDefaultApplication:
+        case BookmarkItem::HandlerHint::OpenWithDefaultApplication:
             fileContents = "xdg-open \"" + item->path() + '"';
             break;
         default:
