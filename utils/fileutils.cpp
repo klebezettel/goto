@@ -20,8 +20,8 @@ FileInfo::FileInfo(const std::string &filePath)
 {
     struct stat s;
     const int err = stat(filePath.c_str(), &s);
-    if(err == -1) {
-        if(ENOENT != errno) {
+    if (err == -1) {
+        if (ENOENT != errno) {
             perror("stat");
             exit(1);
         }
